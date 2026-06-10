@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jersey Junction — Ordering &amp; Inventory</title>
+<style>
+  :root{
+    --cream:#fdf8f0; --card:#ffffff; --ink:#33302b; --muted:#7a7468;
+    --berry:#c2185b; --berry-soft:#fce4ec; --teal:#00796b; --teal-soft:#e0f2f1;
+    --gold:#b8860b; --gold-soft:#fdf3d7; --line:#e8e1d4;
+    --danger:#c62828; --danger-soft:#fdecea; --ok:#2e7d32; --ok-soft:#e8f5e9;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{font-size:16px}
+  body{
+    margin:0; background:var(--cream); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  header.bar{
+    background:linear-gradient(135deg,#8e1d4f,#c2185b);
+    color:#fff; padding:14px 18px 10px;
+  }
+  .bar h1{margin:0; font-size:1.45rem; letter-spacing:.3px}
+  .bar .sub{opacity:.85; font-size:.85rem; margin-top:2px}
+  .chips{display:flex; flex-wrap:wrap; gap:10px; margin-top:12px}
+  .chip{
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.35);
+    border-radius:999px; padding:7px 14px; font-size:.9rem; font-weight:600;
+    display:flex; align-items:center; gap:8px;
+  }
+  .chip.red{background:#b71c1c; border-color:#ff8a80}
+  .chip .dot{width:9px;height:9px;border-radius:50%;background:#aef3b9;display:inline-block}
+  .chip.red .dot{background:#ffcdd2}
+  nav.tabs{
+    display:flex; gap:6px; padding:10px 14px; background:#fff;
+    border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20;
+    overflow-x:auto;
+  }
+  nav.tabs button{
+    border:1px solid var(--line); background:#faf6ee; color:var(--ink);
+    font-size:1rem; font-weight:600; padding:12px 22px; border-radius:999px;
+    cursor:pointer; min-height:48px; white-space:nowrap;
+  }
+  nav.tabs button.active{background:var(--berry); border-color:var(--berry); color:#fff}
+  main{max-width:1180px; margin:0 auto; padding:16px 14px 70px}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(60,40,20,.06);
+  }
+  .card h2{margin:0 0 4px; font-size:1.15rem; display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .card .hint{color:var(--muted); font-size:.85rem; margin:0 0 10px}
+  .badge{font-size:.72rem; font-weight:700; padding:3px 9px; border-radius:999px; letter-spacing:.4px; text-transform:uppercase}
+  .badge.core{background:var(--berry-soft); color:var(--berry)}
+  .badge.nondairy{background:var(--teal-soft); color:var(--teal)}
+  .badge.seasonal{background:var(--gold-soft); color:var(--gold)}
+  .badge.offline{background:#eee; color:#666}
+  .badge.priority{background:#b71c1c; color:#fff}
+  .badge.risk{background:var(--danger-soft); color:var(--danger)}
+  .badge.benched{background:#efebe2; color:#8a8170; text-transform:none}
+  table{width:100%; border-collapse:collapse; font-size:.95rem}
+  th{
+    text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.5px;
+    color:var(--muted); padding:8px 8px 6px; border-bottom:2px solid var(--line);
+    white-space:nowrap;
+  }
+  td{padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tr.dim td{opacity:.45}
+  tr.brandhead td{
+    background:#f6f1e6; font-weight:700; font-size:.85rem; text-transform:uppercase;
+    letter-spacing:.5px; color:#6b6354; border-bottom:1px solid var(--line);
+  }
+  .num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .qty{font-size:1.15rem; font-weight:800}
+  .qty.zero{color:#bbb; font-weight:600}
+  .reason{color:var(--muted); font-size:.8rem; max-width:340px}
+  .flavor-name{font-weight:600}
+  .brand-sub{color:var(--muted); font-size:.78rem}
+  input[type=number], input[type=text], select{
+    font:inherit; padding:9px 10px; border:1px solid #d4cbb8; border-radius:10px;
+    background:#fffdf8; min-height:44px;
+  }
+  input[type=number]{width:84px; text-align:right}
+  input.vel{width:74px}
+  input.rename{width:100%; min-width:150px; font-weight:600}
+  select{min-height:44px}
+  button.act{
+    font:inherit; font-weight:600; min-height:44px; padding:9px 16px; cursor:pointer;
+    border-radius:10px; border:1px solid #d4cbb8; background:#fffdf8;
+  }
+  button.act.primary{background:var(--teal); border-color:var(--teal); color:#fff}
+  button.act.danger{background:#fff; border-color:var(--danger); color:var(--danger)}
+  .table-wrap{overflow-x:auto}
+  .alertbox{border:2px solid var(--danger); background:var(--danger-soft); border-radius:var(--radius); padding:12px 16px; margin-bottom:16px}
+  .alertbox h2{margin:0 0 6px; color:var(--danger); font-size:1.05rem}
+  .alertbox ul{margin:6px 0 0; padding-left:20px}
+  .alertbox li{margin:4px 0}
+  .okbox{border:1.5px solid var(--ok); background:var(--ok-soft); border-radius:var(--radius); padding:10px 16px; margin-bottom:16px; color:var(--ok); font-weight:600}
+  .trimbox{border:1.5px solid var(--gold); background:var(--gold-soft); border-radius:var(--radius); padding:12px 16px; margin-bottom:16px}
+  .trimbox h3{margin:0 0 4px; color:var(--gold); font-size:.98rem}
+  .sheet-friday{border:2.5px solid var(--berry); box-shadow:0 2px 10px rgba(194,24,91,.18)}
+  .sheet-friday h2{font-size:1.3rem}
+  .totals{font-weight:700; padding:10px 8px 2px; font-size:.95rem}
+  .toggle-row{display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap}
+  .switch{display:inline-flex; align-items:center; gap:9px; cursor:pointer; user-select:none;
+    border:1px solid var(--line); background:#fff; border-radius:999px; padding:9px 16px; min-height:48px; font-weight:600}
+  .switch input{width:22px; height:22px; accent-color:var(--teal)}
+  .settings-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px}
+  .field label{display:block; font-size:.8rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:5px}
+  .field .note{font-size:.76rem; color:var(--muted); margin-top:4px}
+  .field input, .field select{width:100%}
+  .empty-slot td{background:repeating-linear-gradient(45deg,#fbf7ee,#fbf7ee 8px,#f4eedd 8px,#f4eedd 16px); color:var(--muted); font-style:italic}
+  .addrow{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:12px}
+  .addrow input[type=text]{min-width:160px}
+  .warn-inline{color:var(--danger); font-weight:700; font-size:.85rem; margin:6px 0}
+  footer{color:var(--muted); text-align:center; font-size:.78rem; padding:18px}
+  @media (max-width:640px){
+    .reason{display:none}
+    th.reason-h{display:none}
+    input[type=number]{width:70px}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+'use strict';
+
+/* ============================== STATE ============================== */
+
+const LS_KEY = 'jersey-junction-v1';
+
+const DEFAULT_SETTINGS = {
+  storefrontWells: 32,
+  nonDairyWells: 3,
+  seasonalWells: 5,
+  backFreezerCap: 100,
+  tubsPerWell: 1,
+  weekendSharePct: 50,        // % of weekly sales that land Fri–Sun
+  weekdaySafety: 1.2,
+  weekendSafety: 1.4,
+  multPeak: 2.3,
+  multShoulder: 1.0,
+  multWinter: 0.5,
+  peakStart: 5,               // May
+  peakEnd: 8,                 // August
+  deliveryDays: 'Mon / Wed / Fri (Cedar Crest)',
+  seasonOverride: 'auto'      // auto | peak | shoulder | winter
+};
+
+// [name, brand, annual units Jan–Nov 2024, avg tubs/week, well type]
+const SEED = [
+  ['Vanilla','Hudsonville',187,4.0,'core'],
+  ['Coffee Lovers','Hudsonville',172,3.7,'core'],
+  ['Deer Traxx','Hudsonville',165,3.6,'core'],
+  ['Cookie N Cream','Hudsonville',157,3.4,'core'],
+  ['Mint Choc Chip','Hudsonville',156,3.4,'core'],
+  ["Michigan Pothole","Ashby's",154,3.3,'core'],
+  ['Cake Batter','Hudsonville',148,3.2,'core'],
+  ['Super Scoop','Hudsonville',145,3.1,'core'],
+  ['Cookie Dough','Hudsonville',142,3.1,'core'],
+  ['Chocolate','Hudsonville',133,2.9,'core'],
+  ['Birthday Cake','Hudsonville',131,2.8,'core'],
+  ['Seaside Caramel','Hudsonville',124,2.7,'core'],
+  ['Traverse Cherry Fudge','Hudsonville',123,2.7,'core'],
+  ['Choc Monster','Hudsonville',119,2.6,'core'],
+  ['Butter Pecan','Hudsonville',106,2.3,'core'],
+  ["S'mores",'Hudsonville',100,2.2,'core'],
+  ['Toasted Coconut','Hudsonville',99,2.1,'core'],
+  ['Candy Playdough','Hudsonville',93,2.0,'core'],
+  ['Peanut Butter Cup','Hudsonville',93,2.0,'core'],
+  ['Rasp Dk Choc Chip','Hudsonville',85,1.8,'core'],
+  ['Milky Way','MI Fresh',81,1.8,'core'],
+  ['Creamy Strawberry','Hudsonville',77,1.7,'core'],
+  ['Salted Caramel','MI Fresh',71,1.5,'core'],
+  ["Carolina Peach","Ashby's",69,1.5,'core'],
+  ['Non-Dairy Cotton Candy','Mooville',23,0.5,'nondairy'],
+  ['Non-Dairy Chocolate','Mooville',18,0.4,'nondairy'],
+  ['Non-Dairy PB&J','Mooville',13,0.3,'nondairy'],
+  ['Strawberry Cheesecake','Hudsonville',67,1.4,'seasonal'],
+  ['Beth Dutton','Mooville',63,1.4,'seasonal'],
+  ['Choc Malt Supreme','Sherman',60,1.3,'seasonal'],
+  ['Bubble Gum','Hudsonville',56,1.2,'seasonal'],
+  ['Sherbet Rainbow','Hudsonville',55,1.2,'seasonal'],
+  ['Sorbet Rasp','Hudsonville',54,1.2,'offline'],
+  ["Sherbet Orange","Ashby's",54,1.2,'offline'],
+  ["Wizard's Brew",'Mooville',44,1.0,'offline'],
+  ['Choc Almond','Hudsonville',37,0.8,'offline'],
+  ["Pumpkin Pie","Ashby's",15,0.3,'offline'],
+  ["Sherbet Rainbow (Ashby's)","Ashby's",8,0.2,'offline'],
+  ['Oh My Pumpkin','Mooville',6,0.1,'offline'],
+  ['Go For Gold','Mooville',5,0.1,'offline'],
+  ["Maj Milky Way","Ashby's",2,0.04,'offline'],
+  ["Strawberry","Ashby's",1,0.02,'offline']
+];
+
+function seedFlavors(){
+  return SEED.map((r,i)=>({
+    id:'f'+i, name:r[0], brand:r[1], annual:r[2], vel:r[3], type:r[4], backups:0
+  }));
+}
+
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){
+      const saved = JSON.parse(raw);
+      return {
+        settings: Object.assign({}, DEFAULT_SETTINGS, saved.settings||{}),
+        flavors: Array.isArray(saved.flavors) && saved.flavors.length ? saved.flavors : seedFlavors()
+      };
+    }
+  }catch(e){ /* corrupted storage — fall through to defaults */ }
+  return { settings: Object.assign({}, DEFAULT_SETTINGS), flavors: seedFlavors() };
+}
+
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+
+let state = load();
+const ui = { tab:'lineup', brandView:false };
+
+/* ============================== MODEL ============================== */
+
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function effectiveSeason(){
+  const s = state.settings;
+  if(s.seasonOverride !== 'auto') return s.seasonOverride;
+  const m = new Date().getMonth()+1;
+  if(m >= s.peakStart && m <= s.peakEnd) return 'peak';
+  if(m === 11 || m === 12 || m === 1 || m === 2) return 'winter';
+  return 'shoulder';
+}
+
+function seasonMult(season){
+  const s = state.settings;
+  return season==='peak' ? s.multPeak : season==='winter' ? s.multWinter : s.multShoulder;
+}
+
+function coreWellCount(){
+  const s = state.settings;
+  return Math.max(0, s.storefrontWells - s.nonDairyWells - s.seasonalWells);
+}
+
+// Builds the full plan: who's displayed, per-flavor demand math,
+// back-freezer rationing (peak only), gauges and alerts.
+function computePlan(){
+  const s = state.settings;
+  const season = effectiveSeason();
+  const mult = seasonMult(season);
+  const share = Math.min(100, Math.max(0, s.weekendSharePct)) / 100;
+
+  const byType = t => state.flavors.filter(f=>f.type===t);
+  const byVelDesc = (a,b)=> b.vel - a.vel;
+
+  // Wells are physical: cap each group at its well count, slowest overflow is benched.
+  // Non-dairy is exempt from velocity ranking — overflow only if over-assigned (kept in list order).
+  const coreAll = byType('core').slice().sort(byVelDesc);
+  const seasAll = byType('seasonal').slice().sort(byVelDesc);
+  const ndAll   = byType('nondairy');
+
+  const core = coreAll.slice(0, coreWellCount());
+  const seas = seasAll.slice(0, s.seasonalWells);
+  const nd   = ndAll.slice(0, s.nonDairyWells);
+  const benched = coreAll.slice(coreWellCount())
+    .concat(seasAll.slice(s.seasonalWells))
+    .concat(ndAll.slice(s.nonDairyWells));
+
+  const displayed = core.concat(nd, seas);
+  const pool = byType('offline');
+
+  const rows = displayed.map(f=>{
+    const weekly      = f.vel * mult;
+    const wkndDemand  = weekly * share;                 // tubs needed Fri–Sun
+    const wkdyDaily   = weekly * (1-share) / 4;         // per-day Mon–Thu
+    const wkndTarget  = wkndDemand * s.weekendSafety;
+    const fridayTubs  = Math.ceil(wkndTarget - 1e-9);   // total tubs to hold going into Fri
+    const backupsNeeded = Math.max(0, fridayTubs - s.tubsPerWell);
+    const mwTarget    = Math.max(0, Math.ceil(wkdyDaily * 2 * s.weekdaySafety - 1e-9));
+    const onHand      = s.tubsPerWell + (Number(f.backups)||0);
+    return { f, weekly, wkndDemand, wkdyDaily, fridayTubs, backupsNeeded,
+             plannedBackups: backupsNeeded, trimmedBy: 0, mwTarget, onHand };
+  });
+
+  // Back-freezer rationing — May–August (peak) only.
+  const rationed = season === 'peak';
+  let plannedTotal = rows.reduce((t,r)=>t+r.plannedBackups, 0);
+  const trims = [];
+  let trimCutoff = null;
+  if(rationed && plannedTotal > s.backFreezerCap){
+    const asc = rows.slice().sort((a,b)=> a.wkndDemand - b.wkndDemand); // lowest weekend velocity first
+    for(const r of asc){
+      while(r.plannedBackups > 0 && plannedTotal > s.backFreezerCap){
+        r.plannedBackups--; r.trimmedBy++; plannedTotal--;
+      }
+      if(plannedTotal <= s.backFreezerCap) break;
+    }
+    for(const r of rows){
+      if(r.trimmedBy > 0){
+        trims.push(r);
+        if(trimCutoff === null || r.wkndDemand > trimCutoff) trimCutoff = r.wkndDemand;
+      }
+    }
+  }
+
+  // Final order quantities.
+  for(const r of rows){
+    r.fridayTarget = s.tubsPerWell + r.plannedBackups;
+    r.orderFri = Math.max(0, r.fridayTarget - r.onHand);
+    r.orderMW  = Math.max(0, r.mwTarget - r.onHand);
+    // Stockout risk: weekend capacity (well + planned backups) below raw weekend demand.
+    r.shortfall = r.wkndDemand - r.fridayTarget;
+    r.stockRisk = r.shortfall > 0.01;
+  }
+
+  const alerts = rows.filter(r=>r.stockRisk).sort((a,b)=> b.shortfall - a.shortfall);
+  const backupsOnHand = state.flavors.reduce((t,f)=> t + (Number(f.backups)||0), 0);
+
+  return {
+    season, mult, share, rows, displayed, benched, pool,
+    wellsUsed: displayed.length,
+    emptySeasonal: Math.max(0, s.seasonalWells - seas.length),
+    emptyCore: Math.max(0, coreWellCount() - core.length),
+    emptyND: Math.max(0, s.nonDairyWells - nd.length),
+    backupsOnHand, plannedTotal, rationed, trims, trimCutoff, alerts
+  };
+}
+
+/* ============================== HELPERS ============================== */
+
+function esc(str){
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function n1(x){ return (Math.round(x*10)/10).toFixed(1); }
+function flavorById(id){ return state.flavors.find(f=>f.id===id); }
+
+const TYPE_LABEL = { core:'Core', nondairy:'Non-Dairy', seasonal:'Seasonal', offline:'Off-line' };
+
+function typeSelect(f){
+  return `<select data-act="set-type" data-id="${f.id}">
+    ${['core','nondairy','seasonal','offline'].map(t=>
+      `<option value="${t}" ${f.type===t?'selected':''}>${TYPE_LABEL[t]}</option>`).join('')}
+  </select>`;
+}
+function backupsInput(f){
+  return `<input type="number" min="0" step="1" value="${Number(f.backups)||0}"
+    data-act="set-backups" data-id="${f.id}" aria-label="Backup tubs on hand for ${esc(f.name)}">`;
+}
+
+/* ============================== RENDER ============================== */
+
+function render(){
+  const plan = computePlan();
+  const s = state.settings;
+  const wellsOver = plan.wellsUsed > s.storefrontWells;
+  const fzOver = plan.backupsOnHand > s.backFreezerCap;
+  const seasonName = {peak:'Peak (May–Aug)', shoulder:'Shoulder', winter:'Winter'}[plan.season];
+
+  document.getElementById('app').innerHTML = `
+  <header class="bar">
+    <h1>🍦 Jersey Junction</h1>
+    <div class="sub">Ordering &amp; inventory · Grand Rapids, MI · Deliveries: ${esc(s.deliveryDays)}</div>
+    <div class="chips">
+      <span class="chip"><span class="dot"></span>Season: ${seasonName} ·×${plan.mult}</span>
+      <span class="chip ${wellsOver?'red':''}">Storefront: ${plan.wellsUsed} / ${s.storefrontWells} wells</span>
+      <span class="chip ${fzOver?'red':''}">Back freezer: ${plan.backupsOnHand} / ${s.backFreezerCap} backups</span>
+      <span class="chip ${plan.rationed && plan.plannedTotal>=s.backFreezerCap?'red':''}">Friday plan: ${plan.plannedTotal} backups</span>
+    </div>
+  </header>
+  <nav class="tabs">
+    <button data-tab="lineup"   class="${ui.tab==='lineup'?'active':''}">Lineup</button>
+    <button data-tab="orders"   class="${ui.tab==='orders'?'active':''}">Order Sheets</button>
+    <button data-tab="settings" class="${ui.tab==='settings'?'active':''}">Settings</button>
+  </nav>
+  <main>
+    ${ui.tab==='lineup' ? renderLineup(plan) : ui.tab==='orders' ? renderOrders(plan) : renderSettings(plan)}
+  </main>
+  <footer>All data is saved automatically in this browser (localStorage). No internet needed.</footer>`;
+}
+
+/* ---------- Lineup ---------- */
+
+function lineupRow(f, plan, opts){
+  opts = opts || {};
+  const editable = f.type === 'seasonal';
+  const nameCell = editable
+    ? `<input type="text" class="rename" value="${esc(f.name)}" data-act="rename" data-id="${f.id}" aria-label="Rename seasonal well">
+       <div class="brand-sub"><input type="text" style="min-height:34px;padding:4px 8px;width:130px;font-size:.8rem" value="${esc(f.brand)}" data-act="set-brand" data-id="${f.id}" aria-label="Brand"></div>`
+    : `<span class="flavor-name">${esc(f.name)}</span><div class="brand-sub">${esc(f.brand)}</div>`;
+  const velCell = editable
+    ? `<input type="number" class="vel" min="0" step="0.1" value="${f.vel}" data-act="set-vel" data-id="${f.id}" aria-label="Weekly velocity estimate">`
+    : `<span class="num">${n1(f.vel)}</span>`;
+  const adj = f.vel * plan.mult;
+  return `<tr>
+    <td>${nameCell}${opts.benched?` <span class="badge benched">benched — no free well</span>`:''}</td>
+    <td class="num">${velCell}</td>
+    <td class="num">${n1(adj)}</td>
+    <td class="num">${backupsInput(f)}</td>
+    <td>${typeSelect(f)}</td>
+  </tr>`;
+}
+
+function lineupSection(title, badgeClass, hint, flavors, plan, emptyCount, benchedSet){
+  const emptyRows = Array.from({length: emptyCount||0}, ()=>
+    `<tr class="empty-slot"><td colspan="5">Empty well — assign a flavor from the off-line pool (set its well type)</td></tr>`).join('');
+  return `<section class="card">
+    <h2><span class="badge ${badgeClass}">${title}</span> ${flavors.length} flavor${flavors.length===1?'':'s'}</h2>
+    <p class="hint">${hint}</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Flavor</th><th class="num">Tubs/wk (base)</th><th class="num">@ season</th><th class="num">Backups on hand</th><th>Well type</th></tr></thead>
+      <tbody>${flavors.map(f=>lineupRow(f, plan, {benched: benchedSet && benchedSet.has(f.id)})).join('')}${emptyRows}</tbody>
+    </table></div>
+  </section>`;
+}
+
+function renderLineup(plan){
+  const benchedSet = new Set(plan.benched.map(f=>f.id));
+  const core = plan.displayed.filter(f=>f.type==='core');
+  const nd   = plan.displayed.filter(f=>f.type==='nondairy');
+  const seas = plan.displayed.filter(f=>f.type==='seasonal');
+  const poolAndBenched = plan.pool.concat(plan.benched);
+
+  let html = '';
+  if(plan.benched.length){
+    html += `<div class="trimbox"><h3>⚠ ${plan.benched.length} flavor(s) over well capacity</h3>
+      Slowest flavors in an over-assigned group are benched to the off-line pool below. Free a well or change well counts in Settings.</div>`;
+  }
+  html += lineupSection(`Core · ${core.length}/${coreWellCount()} wells`, 'core',
+    'Proven high-velocity flavors, ranked in by velocity. On-hand = 1 open storefront tub + the backups you enter.',
+    core, plan, plan.emptyCore, benchedSet);
+  html += lineupSection(`Non-Dairy · ${nd.length}/${state.settings.nonDairyWells} wells`, 'nondairy',
+    'Permanently reserved wells. Exempt from velocity ranking — never benched for being slow.',
+    nd, plan, plan.emptyND, benchedSet);
+  html += lineupSection(`Seasonal · ${seas.length}/${state.settings.seasonalWells} wells`, 'seasonal',
+    'Renameable wells — type a new name/brand to rotate the flavor and adjust its velocity estimate.',
+    seas, plan, plan.emptySeasonal, benchedSet);
+
+  html += `<section class="card">
+    <h2><span class="badge offline">Off-line pool</span> ${poolAndBenched.length} flavors</h2>
+    <p class="hint">Not on display, not ordered. Special-order / rotation candidates — set a well type to bring one into the lineup.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Flavor</th><th class="num">Tubs/wk (base)</th><th class="num">@ season</th><th class="num">Backups on hand</th><th>Well type</th></tr></thead>
+      <tbody>${poolAndBenched.map(f=>{
+        const benched = benchedSet.has(f.id);
+        return `<tr>
+          <td><span class="flavor-name">${esc(f.name)}</span><div class="brand-sub">${esc(f.brand)}</div>
+              ${benched?` <span class="badge benched">benched — no free well</span>`:''}</td>
+          <td class="num">${n1(f.vel)}</td>
+          <td class="num">${n1(f.vel*plan.mult)}</td>
+          <td class="num">${backupsInput(f)}</td>
+          <td>${typeSelect(f)}</td>
+        </tr>`;}).join('')}
+      </tbody>
+    </table></div>
+    <div class="addrow">
+      <div class="field"><label>New flavor</label><input type="text" id="add-name" placeholder="Flavor name"></div>
+      <div class="field"><label>Brand</label><input type="text" id="add-brand" placeholder="Brand"></div>
+      <div class="field"><label>Tubs/wk</label><input type="number" id="add-vel" min="0" step="0.1" value="1.0"></div>
+      <button class="act primary" data-act="add-flavor">+ Add to pool</button>
+    </div>
+  </section>`;
+  return html;
+}
+
+/* ---------- Order sheets ---------- */
+
+function orderRow(r, day){
+  const qty = day==='fri' ? r.orderFri : r.orderMW;
+  const target = day==='fri' ? r.fridayTarget : r.mwTarget;
+  const tier = r.plannedBackups > 0 ? `+${r.plannedBackups} backup${r.plannedBackups===1?'':'s'}` : 'Storefront-only';
+  let reason;
+  if(day==='fri'){
+    reason = `Fri–Sun demand ${n1(r.wkndDemand)} × ${state.settings.weekendSafety} safety → ${r.fridayTubs} tubs`;
+    if(r.trimmedBy > 0) reason += `; trimmed ${r.trimmedBy} (freezer full)`;
+    reason += `; on hand ${r.onHand}`;
+  }else{
+    const next = day==='mon' ? 'Wednesday' : 'Friday';
+    reason = `2-day weekday demand ${n1(r.wkdyDaily*2)} × ${state.settings.weekdaySafety} safety → ${r.mwTarget}; ${next} truck corrects a miss`;
+  }
+  return `<tr class="${qty===0?'dim':''}">
+    <td><span class="flavor-name">${esc(r.f.name)}</span>${r.stockRisk && day==='fri' ? ' <span class="badge risk">stockout risk</span>':''}</td>
+    <td>${esc(r.f.brand)}</td>
+    <td><span class="badge ${r.f.type}">${TYPE_LABEL[r.f.type]}</span></td>
+    <td class="num">${backupsInput(r.f)}<div class="brand-sub" style="text-align:right">= ${r.onHand} on hand</div></td>
+    <td class="num">${target}</td>
+    <td class="num"><span class="qty ${qty===0?'zero':''}">${qty}</span></td>
+    <td>${tier}</td>
+    <td class="reason">${reason}</td>
+  </tr>`;
+}
+
+function orderSheet(plan, day, title, subtitle, priority){
+  const s = state.settings;
+  let rows = plan.rows.slice();
+  // Friday sheet sorted by order size; Mon/Wed by velocity.
+  rows.sort((a,b)=> day==='fri' ? (b.orderFri-a.orderFri || b.wkndDemand-a.wkndDemand)
+                                : (b.orderMW-a.orderMW || b.weekly-a.weekly));
+  const qtyOf = r => day==='fri' ? r.orderFri : r.orderMW;
+  const total = rows.reduce((t,r)=>t+qtyOf(r),0);
+
+  let body;
+  if(ui.brandView){
+    const brands = [...new Set(rows.map(r=>r.f.brand))].sort();
+    body = brands.map(b=>{
+      const brs = rows.filter(r=>r.f.brand===b);
+      const bt = brs.reduce((t,r)=>t+qtyOf(r),0);
+      return `<tr class="brandhead"><td colspan="8">${esc(b)} — order ${bt} tub${bt===1?'':'s'}</td></tr>`
+        + brs.map(r=>orderRow(r,day)).join('');
+    }).join('');
+  }else{
+    body = rows.map(r=>orderRow(r,day)).join('');
+  }
+
+  return `<section class="card ${day==='fri'?'sheet-friday':''}">
+    <h2>${title} ${priority?'<span class="badge priority">Priority · no resupply until Monday</span>':''}</h2>
+    <p class="hint">${subtitle}</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Flavor</th><th>Brand</th><th>Well</th><th class="num">Backups / on hand</th><th class="num">Target</th><th class="num">Order</th><th>Storage tier</th><th class="reason-h">Why</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>
+    <div class="totals">Total order: ${total} tub${total===1?'':'s'}</div>
+  </section>`;
+}
+
+function renderOrders(plan){
+  const s = state.settings;
+  let html = '';
+
+  // Weekend stockout alerts first.
+  if(plan.alerts.length){
+    html += `<div class="alertbox"><h2>⚠ Weekend stockout risk (${plan.alerts.length})</h2>
+      These flavors' Fri–Sun plan (well + backups) is below raw weekend demand:
+      <ul>${plan.alerts.map(r=>
+        `<li><strong>${esc(r.f.name)}</strong> — demand ${n1(r.wkndDemand)} tubs, planned ${r.fridayTarget}
+         (short ${n1(r.shortfall)})${r.trimmedBy?` — lost ${r.trimmedBy} backup${r.trimmedBy===1?'':'s'} to freezer rationing`:''}</li>`).join('')}
+      </ul></div>`;
+  }else{
+    html += `<div class="okbox">✓ No weekend stockout risks — every displayed flavor's Friday plan covers raw Fri–Sun demand.</div>`;
+  }
+
+  // Rationing summary.
+  if(plan.trims.length){
+    html += `<div class="trimbox"><h3>Back-freezer rationing active (peak season)</h3>
+      Planned backups exceeded the ${s.backFreezerCap}-tub freezer. Trimmed from the lowest weekend-velocity flavors first
+      — cutoff: flavors at or below <strong>${n1(plan.trimCutoff)} weekend tubs</strong> lost backups:
+      ${plan.trims.map(r=>`<strong>${esc(r.f.name)}</strong> −${r.trimmedBy}`).join(' · ')}.</div>`;
+  }else if(plan.rationed){
+    html += `<div class="okbox">✓ Peak-season rationing checked: planned backups ${plan.plannedTotal} / ${s.backFreezerCap} fit the freezer — no trims.</div>`;
+  }else{
+    html += `<div class="okbox">✓ Off-peak (${plan.season}): ordering to par, capacity rationing skipped.</div>`;
+  }
+
+  html += `<div class="toggle-row">
+    <label class="switch"><input type="checkbox" data-act="brand-view" ${ui.brandView?'checked':''}> Group by brand (build one order per supplier)</label>
+  </div>`;
+
+  html += orderSheet(plan,'fri','🔴 FRIDAY order','Covers Fri + Sat + Sun — ~'+s.weekendSharePct+'% of weekly sales, no resupply until Monday. Target = weekend demand × '+s.weekendSafety+' safety.',true);
+  html += orderSheet(plan,'mon','Monday order','Covers Mon + Tue (2 days). Low risk — Wednesday truck corrects a miss.',false);
+  html += orderSheet(plan,'wed','Wednesday order','Covers Wed + Thu (2 days). Low risk — Friday truck corrects a miss.',false);
+  return html;
+}
+
+/* ---------- Settings ---------- */
+
+function field(key, label, attrs, note){
+  const v = state.settings[key];
+  return `<div class="field"><label>${label}</label>
+    <input type="number" ${attrs} value="${v}" data-act="set-setting" data-key="${key}">
+    ${note?`<div class="note">${note}</div>`:''}</div>`;
+}
+
+function renderSettings(plan){
+  const s = state.settings;
+  const wellsBad = s.nonDairyWells + s.seasonalWells > s.storefrontWells;
+  return `<section class="card">
+    <h2>Settings</h2>
+    <p class="hint">Everything saves automatically and recalculates the lineup and order sheets.</p>
+    ${wellsBad?`<div class="warn-inline">Non-dairy + seasonal wells exceed total storefront wells — core wells are clamped to 0.</div>`:''}
+    <div class="settings-grid">
+      ${field('storefrontWells','Storefront wells','min="1" step="1"','Dipping cabinet — flavors on display at once')}
+      ${field('nonDairyWells','Non-dairy wells','min="0" step="1"','Reserved, exempt from velocity ranking')}
+      ${field('seasonalWells','Seasonal wells','min="0" step="1"','Renameable rotation wells · Core wells = '+coreWellCount())}
+      ${field('backFreezerCap','Back-freezer capacity (tubs)','min="0" step="1"','Backup/reserve tubs only')}
+      ${field('tubsPerWell','Tubs counted per well','min="0" step="1"','Open tubs auto-counted as on-hand per displayed flavor')}
+      ${field('weekendSharePct','Weekend sales share (%)','min="0" max="100" step="1"','Share of weekly sales landing Fri–Sun')}
+      ${field('weekdaySafety','Weekday safety factor','min="1" step="0.05"','Mon &amp; Wed orders')}
+      ${field('weekendSafety','Weekend safety factor','min="1" step="0.05"','Friday order')}
+      ${field('multPeak','Season multiplier — peak','min="0" step="0.1"','Annual-average velocities understate May–Aug')}
+      ${field('multShoulder','Season multiplier — shoulder','min="0" step="0.1"')}
+      ${field('multWinter','Season multiplier — winter','min="0" step="0.1"','Winter = Nov–Feb')}
+      ${field('peakStart','Peak starts (month #)','min="1" max="12" step="1"','Currently '+MONTHS[s.peakStart-1])}
+      ${field('peakEnd','Peak ends (month #)','min="1" max="12" step="1"','Currently '+MONTHS[s.peakEnd-1]+' · rationing applies only in peak')}
+      <div class="field"><label>Season</label>
+        <select data-act="set-setting" data-key="seasonOverride">
+          <option value="auto" ${s.seasonOverride==='auto'?'selected':''}>Auto (by today's date)</option>
+          <option value="peak" ${s.seasonOverride==='peak'?'selected':''}>Force Peak</option>
+          <option value="shoulder" ${s.seasonOverride==='shoulder'?'selected':''}>Force Shoulder</option>
+          <option value="winter" ${s.seasonOverride==='winter'?'selected':''}>Force Winter</option>
+        </select>
+        <div class="note">Override to plan ahead — currently resolving to <strong>${plan.season}</strong> (×${plan.mult})</div>
+      </div>
+      <div class="field"><label>Delivery days</label>
+        <input type="text" value="${esc(s.deliveryDays)}" data-act="set-setting" data-key="deliveryDays">
+        <div class="note">Display only — order sheets model Mon / Wed / Fri coverage</div>
+      </div>
+    </div>
+    <div class="addrow" style="margin-top:20px">
+      <button class="act danger" data-act="reset-all">Reset everything to defaults</button>
+      <div class="note" style="align-self:center;color:var(--muted);font-size:.8rem">Clears saved counts, well assignments, renames and settings.</div>
+    </div>
+  </section>`;
+}
+
+/* ============================== EVENTS ============================== */
+
+document.addEventListener('click', e=>{
+  const tabBtn = e.target.closest('[data-tab]');
+  if(tabBtn){ ui.tab = tabBtn.dataset.tab; render(); return; }
+  const btn = e.target.closest('[data-act]');
+  if(!btn) return;
+  if(btn.dataset.act === 'add-flavor'){
+    const name = document.getElementById('add-name').value.trim();
+    const brand = document.getElementById('add-brand').value.trim() || 'Special order';
+    const vel = Math.max(0, parseFloat(document.getElementById('add-vel').value) || 0);
+    if(!name) return;
+    state.flavors.push({ id:'f'+Date.now(), name, brand, annual:0, vel, type:'offline', backups:0 });
+    save(); render();
+  }
+  if(btn.dataset.act === 'reset-all'){
+    if(confirm('Reset ALL data (counts, assignments, renames, settings) to defaults?')){
+      localStorage.removeItem(LS_KEY);
+      state = load();
+      save(); render();
+    }
+  }
+});
+
+document.addEventListener('change', e=>{
+  const el = e.target.closest('[data-act]');
+  if(!el) return;
+  const act = el.dataset.act;
+  const f = el.dataset.id ? flavorById(el.dataset.id) : null;
+
+  if(act==='set-backups' && f){ f.backups = Math.max(0, Math.floor(parseFloat(el.value)||0)); }
+  else if(act==='set-type' && f){ f.type = el.value; }
+  else if(act==='rename' && f){ const v = el.value.trim(); if(v) f.name = v; }
+  else if(act==='set-brand' && f){ const v = el.value.trim(); if(v) f.brand = v; }
+  else if(act==='set-vel' && f){ f.vel = Math.max(0, parseFloat(el.value)||0); }
+  else if(act==='brand-view'){ ui.brandView = el.checked; }
+  else if(act==='set-setting'){
+    const key = el.dataset.key;
+    if(key==='deliveryDays' || key==='seasonOverride'){ state.settings[key] = el.value; }
+    else{
+      let v = parseFloat(el.value);
+      if(isNaN(v)) v = DEFAULT_SETTINGS[key];
+      if(['storefrontWells','nonDairyWells','seasonalWells','backFreezerCap','tubsPerWell','weekendSharePct','peakStart','peakEnd'].includes(key)) v = Math.floor(v);
+      if(key==='storefrontWells') v = Math.max(1, v);
+      else if(key==='peakStart'||key==='peakEnd') v = Math.min(12, Math.max(1, v));
+      else if(key==='weekendSharePct') v = Math.min(100, Math.max(0, v));
+      else v = Math.max(0, v);
+      state.settings[key] = v;
+    }
+  }else{
+    return;
+  }
+  save(); render();
+});
+
+render();
+</script>
+</body>
+</html>
