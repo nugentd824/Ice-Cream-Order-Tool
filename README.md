@@ -3,9 +3,15 @@
 A single-file web app for running the dipping cabinet, back freezer, and Cedar Crest
 orders at Jersey Junction (Grand Rapids, MI). No server, no build step, no framework.
 
+Repository: <https://github.com/nugentd824/Ice-Cream-Order-Tool>
+
 ## How to run
 
 Double-click `index.html` (or open it in any browser). That's it.
+
+To grab it from GitHub: open the repo above, download `index.html`, and double-click it.
+The UI is styled to match the jerseyjunction.com storefront; it loads the Poppins
+heading font from Google Fonts when online and falls back to your system font offline.
 
 All data — on-hand counts, well assignments, seasonal renames, and settings — is saved
 automatically in the browser's localStorage. Refreshing or closing the tab loses nothing.
