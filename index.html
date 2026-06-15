@@ -136,6 +136,9 @@
   .imp-conf.low{background:var(--danger-soft); color:var(--danger)}
   .imp-row-select{min-width:170px}
   .imp-row-count{width:72px}
+  .imp-busy{font-weight:700; color:var(--teal); padding:10px 0}
+  .imp-hint2{font-size:.82rem; color:var(--muted); margin-top:10px}
+  .linklike{background:none; border:none; color:var(--teal); font:inherit; font-weight:600; text-decoration:underline; cursor:pointer; padding:0}
   footer{color:var(--muted); text-align:center; font-size:.78rem; padding:18px}
   @media (max-width:640px){
     .reason{display:none}
@@ -451,18 +454,75 @@ function applyImport(){
   }
   ui.imp=null; save(); render();
 }
+// OCR engine is loaded from a CDN only when the user actually scans a photo,
+// so the app still opens and runs offline unless/until you use the scanner.
+let _tessLoading=null;
+function ensureTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(_tessLoading) return _tessLoading;
+  _tessLoading = new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload=()=> window.Tesseract ? resolve() : reject(new Error('Tesseract missing'));
+    s.onerror=()=> reject(new Error('load failed'));
+    document.head.appendChild(s);
+  });
+  return _tessLoading;
+}
+// Turn raw OCR text into review rows: keep only lines that fuzzy-match a flavor
+// (drops the door's sign text / brand), then dedupe to the best line per flavor.
+function ocrToRows(text){
+  const hits=[];
+  for(const line of String(text).split(/\r?\n/)){
+    if(line.trim().length<3) continue;
+    const parsed=parseImportLines(line)[0];
+    if(!parsed) continue;
+    const bm=bestMatch(parsed.label);
+    if(bm.score>=0.34) hits.push({ label:parsed.label, count:parsed.count, flavorId:bm.flavor.id, score:bm.score });
+  }
+  const byId={};
+  for(const r of hits){ if(!byId[r.flavorId] || r.score>byId[r.flavorId].score) byId[r.flavorId]=r; }
+  return Object.values(byId);
+}
+async function handleImportFile(file){
+  if(!file || !ui.imp) return;
+  ui.imp.error=''; ui.imp.busy=true; ui.imp.statusText='loading scanner…'; render();
+  try{
+    await ensureTesseract();
+    const res = await Tesseract.recognize(file, 'eng', { logger: m=>{
+      if(!m.status) return;
+      const txt = m.status + (m.progress!=null ? ' '+Math.round(m.progress*100)+'%' : '');
+      if(ui.imp && ui.imp.busy && txt!==ui.imp.statusText){ ui.imp.statusText=txt; render(); }
+    }});
+    if(!ui.imp) return;                       // cancelled mid-scan
+    const rows = ocrToRows(res && res.data ? res.data.text : '');
+    ui.imp.busy=false;
+    if(!rows.length){
+      ui.imp.error='Couldn’t read any flavors from that photo. Try a clearer, straight-on shot — or paste the counts as text.';
+    }else{
+      ui.imp.rows=rows;
+      ui.imp.note='Scanned '+rows.length+' flavor label(s). Handwritten tally strokes don’t scan reliably — set or confirm each count below before applying.';
+    }
+    render();
+  }catch(err){
+    if(ui.imp){ ui.imp.busy=false; ui.imp.error='Couldn’t run the scanner (it downloads once and needs internet). You can paste the counts as text instead.'; render(); }
+  }
+}
 function renderImportCard(){
   if(!ui.imp){
     return `<section class="card import-card">
-      <h2>📋 Import backup counts</h2>
-      <p class="hint">Prefill the Backups on Hand column from your freezer tally sheet — paste one flavor per line with its count. Names are fuzzy-matched and you review before applying.</p>
-      <button class="act primary" data-act="imp-open">Import counts…</button>
+      <h2>📷 Scan / import backup counts</h2>
+      <p class="hint">Prefill the Backups on Hand column from your freezer door — upload a photo to scan the flavor labels, or paste counts as text. You review everything before it's applied.</p>
+      <button class="act primary" data-act="imp-open">Scan / import…</button>
     </section>`;
   }
   const imp=ui.imp;
   const opts = state.flavors.slice().sort((a,b)=>a.name.localeCompare(b.name));
   let body;
-  if(imp.rows){
+  if(imp.busy){
+    body = `<div class="imp-busy">⏳ Scanning photo… ${esc(imp.statusText||'')}</div>
+      <div class="imp-actions"><button class="act" data-act="imp-cancel">Cancel</button></div>`;
+  } else if(imp.rows){
     body = `<div class="table-wrap"><table>
       <thead><tr><th>From sheet</th><th class="num">Count</th><th>Matches flavor</th><th>Confidence</th></tr></thead>
       <tbody>${imp.rows.map((r,i)=>`
@@ -476,22 +536,29 @@ function renderImportCard(){
           <td><span class="imp-conf ${confClass(r.score)}">${confText(r.score)}</span></td>
         </tr>`).join('')}
       </tbody></table></div>
+      ${imp.note?`<p class="imp-hint2">${esc(imp.note)}</p>`:''}
       <label class="switch" style="margin-top:12px"><input type="checkbox" data-act="imp-setzero" ${imp.setZero?'checked':''}> Set displayed flavors not listed above to 0</label>
       <div class="imp-actions">
         <button class="act primary" data-act="imp-apply">Apply to Backups on Hand</button>
-        <button class="act" data-act="imp-edit">Edit text</button>
+        <button class="act" data-act="imp-edit">Edit as text</button>
         <button class="act" data-act="imp-cancel">Cancel</button>
       </div>`;
-  } else {
+  } else if(imp.mode==='paste'){
     body = `<textarea class="imp-text" id="imp-text" placeholder="Coffee 3&#10;Seaside Caramel: 3&#10;Strawberry |||&#10;Vanilla 0">${esc(imp.text||'')}</textarea>
       <div class="imp-actions">
         <button class="act primary" data-act="imp-preview">Preview matches</button>
-        <button class="act" data-act="imp-cancel">Cancel</button>
+        <button class="act" data-act="imp-back">Back</button>
       </div>`;
+  } else {
+    body = `<label class="act primary" for="imp-file" style="display:inline-block">📷 Upload freezer photo (JPEG/PNG)</label>
+      <input id="imp-file" type="file" accept="image/*" data-act="imp-file" style="display:none">
+      ${imp.error?`<div class="warn-inline">${esc(imp.error)}</div>`:''}
+      <p class="imp-hint2">The scan reads the printed flavor labels; handwritten tally strokes don't scan reliably, so you'll confirm the counts on the next screen. <button class="linklike" data-act="imp-paste">Or paste counts as text instead</button></p>
+      <div class="imp-actions"><button class="act" data-act="imp-cancel">Cancel</button></div>`;
   }
   return `<section class="card import-card">
-    <h2>📋 Import backup counts</h2>
-    <p class="hint">One flavor per line, name then count — numbers (<code>Coffee 3</code>) or tally strokes (<code>Coffee |||</code>). Names are fuzzy-matched; review and fix below before applying. Unlisted displayed flavors are set to 0.</p>
+    <h2>📷 Scan / import backup counts</h2>
+    <p class="hint">Upload a photo of the freezer door (or paste text). Names are fuzzy-matched; review and fix counts before applying. Unlisted displayed flavors are set to 0.</p>
     ${body}
   </section>`;
 }
@@ -768,9 +835,11 @@ document.addEventListener('click', e=>{
   const btn = e.target.closest('[data-act]');
   if(!btn) return;
   const act = btn.dataset.act;
-  if(act==='imp-open'){ ui.imp={text:'',rows:null,setZero:true}; render(); return; }
+  if(act==='imp-open'){ ui.imp={mode:'choose',text:'',rows:null,setZero:true,busy:false,statusText:'',error:'',note:''}; render(); return; }
+  if(act==='imp-paste'){ if(ui.imp){ ui.imp.mode='paste'; ui.imp.error=''; } render(); return; }
+  if(act==='imp-back'){ if(ui.imp) ui.imp.mode='choose'; render(); return; }
   if(act==='imp-cancel'){ ui.imp=null; render(); return; }
-  if(act==='imp-edit'){ if(ui.imp) ui.imp.rows=null; render(); return; }
+  if(act==='imp-edit'){ if(ui.imp){ ui.imp.rows=null; ui.imp.mode='paste'; } render(); return; }
   if(act==='imp-preview'){
     const ta=document.getElementById('imp-text');
     if(ui.imp){ ui.imp.text = ta ? ta.value : ''; ui.imp.rows = buildImportRows(ui.imp.text); }
@@ -798,6 +867,8 @@ document.addEventListener('change', e=>{
   const el = e.target.closest('[data-act]');
   if(!el) return;
   const act = el.dataset.act;
+
+  if(act==='imp-file'){ handleImportFile(el.files && el.files[0]); return; }
 
   // Import review edits update the pending import only — no save/re-render,
   // so the review table keeps its place while you fix matches.
