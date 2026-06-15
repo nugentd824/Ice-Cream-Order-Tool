@@ -126,6 +126,16 @@
   .addrow{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:12px}
   .addrow input[type=text]{min-width:160px}
   .warn-inline{color:var(--danger); font-weight:700; font-size:.85rem; margin:6px 0}
+  .import-card{border:2px dashed var(--teal); background:#f3faf6}
+  .import-card h2{color:var(--teal)}
+  .imp-text{width:100%; min-height:120px; font:inherit; padding:10px 12px; border:1px solid #c9c0ad; border-radius:10px; background:#fffdf8; resize:vertical}
+  .imp-actions{display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; align-items:center}
+  .imp-conf{font-size:.7rem; font-weight:700; padding:3px 9px; border-radius:999px; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap}
+  .imp-conf.high{background:var(--ok-soft); color:var(--ok)}
+  .imp-conf.med{background:var(--gold-soft); color:var(--gold)}
+  .imp-conf.low{background:var(--danger-soft); color:var(--danger)}
+  .imp-row-select{min-width:170px}
+  .imp-row-count{width:72px}
   footer{color:var(--muted); text-align:center; font-size:.78rem; padding:18px}
   @media (max-width:640px){
     .reason{display:none}
@@ -360,6 +370,132 @@ function backupsInput(f){
     data-act="set-backups" data-id="${f.id}" aria-label="Backup tubs on hand for ${esc(f.name)}">`;
 }
 
+/* ===================== IMPORT (paste freezer counts) ===================== */
+// The back-freezer door uses printed labels + handwritten tally strokes that
+// don't match the app's catalog names 1:1, so names are fuzzy-matched and a
+// review step lets a human confirm before anything is written.
+
+const ABBREV = {
+  nd:'non dairy', choc:'chocolate', choco:'chocolate', chocolat:'chocolate',
+  mi:'michigan', tc:'traverse', pb:'peanut butter', dk:'dark',
+  rasp:'raspberry', sherbert:'sherbet', n:'and'
+};
+function normName(s){
+  const words = String(s).toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);
+  return words.map(w=> ABBREV[w]||w).join(' ').replace(/\s+/g,' ').trim();
+}
+function bigrams(s){ s=s.replace(/\s/g,''); const b=[]; for(let i=0;i<s.length-1;i++) b.push(s.slice(i,i+2)); return b; }
+function dice(a,b){
+  const A=bigrams(a), B=bigrams(b);
+  if(!A.length||!B.length) return a===b?1:0;
+  const m={}; A.forEach(x=>m[x]=(m[x]||0)+1);
+  let inter=0; B.forEach(x=>{ if(m[x]>0){inter++; m[x]--;} });
+  return 2*inter/(A.length+B.length);
+}
+function tokJaccard(a,b){
+  const A=a.split(' ').filter(Boolean), B=b.split(' ').filter(Boolean);
+  if(!A.length||!B.length) return 0;
+  const used=new Array(B.length).fill(false);
+  let inter=0;
+  for(const x of A){
+    for(let j=0;j<B.length;j++){
+      if(used[j]) continue;
+      const y=B[j];
+      if(x===y || (x.length>=4&&y.length>=4&&(x.startsWith(y)||y.startsWith(x)))){ used[j]=true; inter++; break; }
+    }
+  }
+  return inter/(A.length+B.length-inter);
+}
+function simScore(a,b){ return Math.max(dice(a,b), tokJaccard(a,b)); }
+function bestMatch(label){
+  const n=normName(label);
+  let best=null, bestScore=0;
+  for(const f of state.flavors){
+    const sc=simScore(n, normName(f.name));
+    if(sc>bestScore){ bestScore=sc; best=f; }
+  }
+  return { flavor: best, score: bestScore };
+}
+// Each line: a flavor name followed by a count — a number ("Coffee 3") or
+// tally strokes ("Coffee |||"). A name with no count is left blank for review.
+function parseImportLines(text){
+  return String(text).split(/\r?\n/).map(line=>{
+    const raw=line.trim();
+    if(!raw) return null;
+    let m=raw.match(/^(.*?)[\s:.=\-]*(\d{1,3})\s*$/);
+    if(m && m[1].trim()) return { label:m[1].trim(), count:parseInt(m[2],10) };
+    m=raw.match(/^(.*?)[\s:.=\-]*([|‖/\\]{1,40})\s*$/);
+    if(m && m[1].trim()) return { label:m[1].trim(), count:(m[2].match(/[|‖/\\]/g)||[]).length };
+    return { label:raw, count:null };
+  }).filter(Boolean);
+}
+function buildImportRows(text){
+  return parseImportLines(text).map(l=>{
+    const bm=bestMatch(l.label);
+    return { label:l.label, count:l.count, flavorId: bm.score>=0.40 ? bm.flavor.id : '', score: bm.score };
+  });
+}
+function confClass(s){ return s>=0.62?'high':s>=0.40?'med':'low'; }
+function confText(s){ return s>=0.62?'match':s>=0.40?'check':'no match'; }
+function applyImport(){
+  const imp=ui.imp; if(!imp||!imp.rows) return;
+  const touched=new Set();
+  for(const r of imp.rows){
+    if(r.flavorId && r.count!=null && !isNaN(r.count)){
+      const f=flavorById(r.flavorId);
+      if(f){ f.backups=Math.max(0,Math.floor(r.count)); touched.add(f.id); }
+    }
+  }
+  if(imp.setZero){
+    for(const f of computePlan().displayed){ if(!touched.has(f.id)) f.backups=0; }
+  }
+  ui.imp=null; save(); render();
+}
+function renderImportCard(){
+  if(!ui.imp){
+    return `<section class="card import-card">
+      <h2>📋 Import backup counts</h2>
+      <p class="hint">Prefill the Backups on Hand column from your freezer tally sheet — paste one flavor per line with its count. Names are fuzzy-matched and you review before applying.</p>
+      <button class="act primary" data-act="imp-open">Import counts…</button>
+    </section>`;
+  }
+  const imp=ui.imp;
+  const opts = state.flavors.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  let body;
+  if(imp.rows){
+    body = `<div class="table-wrap"><table>
+      <thead><tr><th>From sheet</th><th class="num">Count</th><th>Matches flavor</th><th>Confidence</th></tr></thead>
+      <tbody>${imp.rows.map((r,i)=>`
+        <tr>
+          <td>${esc(r.label)}</td>
+          <td class="num"><input type="number" min="0" step="1" class="imp-row-count" data-act="imp-row-count" data-i="${i}" value="${r.count==null?'':r.count}"></td>
+          <td><select class="imp-row-select" data-act="imp-row-flavor" data-i="${i}">
+            <option value="">(ignore)</option>
+            ${opts.map(f=>`<option value="${f.id}" ${f.id===r.flavorId?'selected':''}>${esc(f.name)}</option>`).join('')}
+          </select></td>
+          <td><span class="imp-conf ${confClass(r.score)}">${confText(r.score)}</span></td>
+        </tr>`).join('')}
+      </tbody></table></div>
+      <label class="switch" style="margin-top:12px"><input type="checkbox" data-act="imp-setzero" ${imp.setZero?'checked':''}> Set displayed flavors not listed above to 0</label>
+      <div class="imp-actions">
+        <button class="act primary" data-act="imp-apply">Apply to Backups on Hand</button>
+        <button class="act" data-act="imp-edit">Edit text</button>
+        <button class="act" data-act="imp-cancel">Cancel</button>
+      </div>`;
+  } else {
+    body = `<textarea class="imp-text" id="imp-text" placeholder="Coffee 3&#10;Seaside Caramel: 3&#10;Strawberry |||&#10;Vanilla 0">${esc(imp.text||'')}</textarea>
+      <div class="imp-actions">
+        <button class="act primary" data-act="imp-preview">Preview matches</button>
+        <button class="act" data-act="imp-cancel">Cancel</button>
+      </div>`;
+  }
+  return `<section class="card import-card">
+    <h2>📋 Import backup counts</h2>
+    <p class="hint">One flavor per line, name then count — numbers (<code>Coffee 3</code>) or tally strokes (<code>Coffee |||</code>). Names are fuzzy-matched; review and fix below before applying. Unlisted displayed flavors are set to 0.</p>
+    ${body}
+  </section>`;
+}
+
 /* ============================== RENDER ============================== */
 
 function render(){
@@ -433,7 +569,7 @@ function renderLineup(plan){
   const seas = plan.displayed.filter(f=>f.type==='seasonal');
   const poolAndBenched = plan.pool.concat(plan.benched);
 
-  let html = '';
+  let html = renderImportCard();
   if(plan.benched.length){
     html += `<div class="trimbox"><h3>⚠ ${plan.benched.length} flavor(s) over well capacity</h3>
       Slowest flavors in an over-assigned group are benched to the off-line pool below. Free a well or change well counts in Settings.</div>`;
@@ -631,6 +767,16 @@ document.addEventListener('click', e=>{
   if(tabBtn){ ui.tab = tabBtn.dataset.tab; render(); return; }
   const btn = e.target.closest('[data-act]');
   if(!btn) return;
+  const act = btn.dataset.act;
+  if(act==='imp-open'){ ui.imp={text:'',rows:null,setZero:true}; render(); return; }
+  if(act==='imp-cancel'){ ui.imp=null; render(); return; }
+  if(act==='imp-edit'){ if(ui.imp) ui.imp.rows=null; render(); return; }
+  if(act==='imp-preview'){
+    const ta=document.getElementById('imp-text');
+    if(ui.imp){ ui.imp.text = ta ? ta.value : ''; ui.imp.rows = buildImportRows(ui.imp.text); }
+    render(); return;
+  }
+  if(act==='imp-apply'){ applyImport(); return; }
   if(btn.dataset.act === 'add-flavor'){
     const name = document.getElementById('add-name').value.trim();
     const brand = document.getElementById('add-brand').value.trim() || 'Special order';
@@ -652,6 +798,16 @@ document.addEventListener('change', e=>{
   const el = e.target.closest('[data-act]');
   if(!el) return;
   const act = el.dataset.act;
+
+  // Import review edits update the pending import only — no save/re-render,
+  // so the review table keeps its place while you fix matches.
+  if(act==='imp-setzero'){ if(ui.imp) ui.imp.setZero=el.checked; return; }
+  if(act==='imp-row-count'){
+    if(ui.imp&&ui.imp.rows){ const v=el.value.trim(); ui.imp.rows[+el.dataset.i].count = v===''?null:Math.max(0,Math.floor(parseFloat(v)||0)); }
+    return;
+  }
+  if(act==='imp-row-flavor'){ if(ui.imp&&ui.imp.rows) ui.imp.rows[+el.dataset.i].flavorId=el.value; return; }
+
   const f = el.dataset.id ? flavorById(el.dataset.id) : null;
 
   if(act==='set-backups' && f){ f.backups = Math.max(0, Math.floor(parseFloat(el.value)||0)); }

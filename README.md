@@ -36,6 +36,23 @@ Enter each flavor's **backup tubs on hand** (back freezer) here or on the order 
 order quantities update live. The open storefront tub is counted automatically
 (tubs-per-well setting, default 1).
 
+**Import backup counts (from the freezer tally sheet).** At the top of the Lineup is an
+**Import counts** panel for prefilling the whole Backups on Hand column at once. Click
+*Import counts…*, then paste one flavor per line with its count — either a number
+(`Coffee 3`) or tally strokes matching the freezer door (`Coffee |||`). Press
+*Preview matches* and you get a review table: each line is fuzzy-matched to a catalog
+flavor (the door's abbreviated labels like `MI Pothole`, `ND Chocolate`, or
+`Orange Sherbert` resolve to *Michigan Pothole*, *Non-Dairy Chocolate*, *Sherbet
+Orange*), with a confidence badge — **match** (green) is confident, **check** (amber)
+needs a glance, **no match** (red) needs you to pick the flavor or leave it `(ignore)`.
+Fix any count or flavor inline, then *Apply to Backups on Hand*. By default any displayed
+flavor **not** on your sheet is set to 0 (an unmarked label = none in the freezer); untick
+the checkbox if your sheet only covers part of the freezer. Nothing is written until you
+press Apply, so a misread is always caught at the review step.
+
+Tip: you can also snap a photo of the door and have Claude read the tallies into a
+paste-ready list — the app itself stays fully offline and dependency-free.
+
 ### Order Sheets
 Three sheets — **Friday first and most prominent** (covers Fri–Sun, ~50% of weekly
 sales, no resupply until Monday), then Monday and Wednesday (each covers 2 days; the
