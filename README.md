@@ -42,8 +42,12 @@ for prefilling the whole Backups on Hand column at once. Click *Scan / import…
 - **Upload a photo (JPEG/PNG)** of the freezer door. The app runs OCR in your browser
   (Tesseract.js, downloaded once from a CDN — so the *scan* needs internet the first
   time; the rest of the app stays offline), reads the printed flavor labels, and
-  pre-fills the review table. Handwritten tally strokes do **not** scan reliably, so the
-  scan fills in the flavor matches and you enter/confirm the counts.
+  pre-fills the review table. It also **estimates each count** by analyzing the
+  handwritten tally strokes to the right of each label (projecting the pen ink and
+  counting separated vertical strokes). Stroke counting is approximate — photo angle,
+  smudges, and faint marks all affect it — so the estimates are there to save typing and
+  **must be verified** at the review step. If a number is printed on the line, that wins
+  over the estimate; if the analysis can't run, counts are left blank.
 - **Or paste counts as text** — one flavor per line with a number (`Coffee 3`) or tally
   strokes (`Coffee |||`). This path is fully offline and the most reliable.
 
