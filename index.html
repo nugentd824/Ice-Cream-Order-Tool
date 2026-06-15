@@ -384,7 +384,10 @@ const ABBREV = {
   rasp:'raspberry', sherbert:'sherbet', n:'and'
 };
 function normName(s){
-  const words = String(s).toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(Boolean);
+  const cleaned = String(s).toLowerCase()
+    .replace(/0/g,'o').replace(/1/g,'l').replace(/5/g,'s')   // common OCR letter/digit mixups
+    .replace(/[^a-z0-9\s]/g,' ');
+  const words = cleaned.split(/\s+/).filter(Boolean);
   return words.map(w=> ABBREV[w]||w).join(' ').replace(/\s+/g,' ').trim();
 }
 function bigrams(s){ s=s.replace(/\s/g,''); const b=[]; for(let i=0;i<s.length-1;i++) b.push(s.slice(i,i+2)); return b; }
@@ -548,6 +551,45 @@ function imageToCtx(file){
     img.src=url;
   });
 }
+// Upscale + grayscale + contrast-stretch the photo before OCR — small label text
+// in a phone photo is low-res for an OCR engine, and this markedly improves letters.
+function preprocessForOcr(srcCtx){
+  const sw=srcCtx.canvas.width, sh=srcCtx.canvas.height;
+  const scale=Math.min(3, Math.max(1, 1600/Math.max(sw,sh)));
+  const w=Math.round(sw*scale), h=Math.round(sh*scale);
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const ctx=c.getContext('2d');
+  ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+  ctx.drawImage(srcCtx.canvas, 0,0, w,h);
+  const img=ctx.getImageData(0,0,w,h), d=img.data;
+  for(let i=0;i<d.length;i+=4){
+    let v=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];   // grayscale
+    v=(v-128)*1.4+128;                             // contrast stretch
+    d[i]=d[i+1]=d[i+2]= v<0?0:v>255?255:v;
+  }
+  ctx.putImageData(img,0,0);
+  return { canvas:c, scale };
+}
+// Run OCR with a DPI hint (helps small text); prefers the worker API for that
+// control, falling back to the convenience call if unavailable.
+async function ocrRecognize(image){
+  const logger = m=>{
+    if(!m || !m.status) return;
+    const txt = m.status + (m.progress!=null ? ' '+Math.round(m.progress*100)+'%' : '');
+    if(ui.imp && ui.imp.busy && txt!==ui.imp.statusText){ ui.imp.statusText=txt; render(); }
+  };
+  if(Tesseract.createWorker){
+    try{
+      const worker = await Tesseract.createWorker('eng', 1, { logger });
+      try{ await worker.setParameters({ user_defined_dpi:'300' }); }catch(e){}
+      const res = await worker.recognize(image);
+      await worker.terminate();
+      return res.data;
+    }catch(e){ /* fall back below */ }
+  }
+  const res = await Tesseract.recognize(image, 'eng', { logger });
+  return res.data;
+}
 function getLines(data){
   if(!data) return [];
   if(Array.isArray(data.lines) && data.lines.length) return data.lines;
@@ -559,7 +601,8 @@ function getLines(data){
 }
 // Build review rows from OCR line boxes, estimating each count from the strokes
 // drawn to the right of the label. A number OCR'd on the line wins over the estimate.
-function linesToRows(data, ctx){
+function linesToRows(data, ctx, scale){
+  scale = scale || 1;
   const hits=[];
   for(const ln of getLines(data)){
     const text=ln && ln.text ? ln.text : '';
@@ -569,39 +612,52 @@ function linesToRows(data, ctx){
     const bm=bestMatch(parsed.label);
     if(bm.score<0.34) continue;
     let count=parsed.count;
-    if(count==null && ctx && ln.bbox) count=countStrokesRightOf(ctx, ln.bbox);
+    if(count==null && ctx && ln.bbox){
+      const b={ x0:ln.bbox.x0/scale, y0:ln.bbox.y0/scale, x1:ln.bbox.x1/scale, y1:ln.bbox.y1/scale };
+      count=countStrokesRightOf(ctx, b);
+    }
     hits.push({ label:parsed.label, count:(count==null?null:count), flavorId:bm.flavor.id, score:bm.score });
   }
   return dedupeRows(hits);
+}
+// Write scanned counts straight onto the flavors the app recognized, then hand off
+// to the Lineup for the user to double-check — no confusing raw-OCR review screen.
+function applyScannedRows(rows){
+  const set=[]; let skipped=0;
+  for(const r of rows){
+    if(r.flavorId && r.count!=null && !isNaN(r.count)){
+      const f=flavorById(r.flavorId);
+      if(f){ f.backups=Math.max(0,Math.floor(r.count)); set.push({ name:f.name, count:f.backups }); continue; }
+    }
+    skipped++;
+  }
+  set.sort((a,b)=>a.name.localeCompare(b.name));
+  save();
+  return { set, skipped };
 }
 async function handleImportFile(file){
   if(!file || !ui.imp) return;
   ui.imp.error=''; ui.imp.busy=true; ui.imp.statusText='loading scanner…'; render();
   try{
     await ensureTesseract();
-    const res = await Tesseract.recognize(file, 'eng', { logger: m=>{
-      if(!m.status) return;
-      const txt = m.status + (m.progress!=null ? ' '+Math.round(m.progress*100)+'%' : '');
-      if(ui.imp && ui.imp.busy && txt!==ui.imp.statusText){ ui.imp.statusText=txt; render(); }
-    }});
-    if(!ui.imp) return;                       // cancelled mid-scan
-    let rows, estimated=false;
+    let ctx=null, scale=1, ocrInput=file;
     try{
-      const ctx = await imageToCtx(file);
-      rows = linesToRows(res && res.data, ctx);
-      estimated = rows.some(r=>r.count!=null);
-    }catch(e){
-      rows = ocrToRows(res && res.data ? res.data.text : '');   // counts blank
-    }
+      ctx = await imageToCtx(file);                 // original color, for stroke counting
+      const pre = preprocessForOcr(ctx);            // upscaled grayscale, for OCR accuracy
+      ocrInput = pre.canvas; scale = pre.scale;
+    }catch(e){ ctx=null; scale=1; ocrInput=file; }  // preprocessing unavailable -> OCR raw file
+    const data = await ocrRecognize(ocrInput);
+    if(!ui.imp) return;                             // cancelled mid-scan
+    const rows = ctx ? linesToRows(data, ctx, scale) : ocrToRows(data && data.text ? data.text : '');
     ui.imp.busy=false;
     if(!rows.length){
-      ui.imp.error='Couldn’t read any flavors from that photo. Try a clearer, straight-on shot — or paste the counts as text.';
-    }else{
-      ui.imp.rows=rows;
-      ui.imp.note='Scanned '+rows.length+' flavor label(s)'+(estimated
-        ? ' and estimated the tally counts — please verify each count before applying.'
-        : '. Set or confirm each count below before applying.');
+      ui.imp.error='Couldn’t read flavors from that photo. Try a closer, straight-on, well-lit shot — or paste the counts as text.';
+      render();
+      return;
     }
+    const summary = applyScannedRows(rows);
+    ui.imp=null;                                    // close the importer
+    ui.scanSummary=summary;                         // show a clean summary in the Lineup
     render();
   }catch(err){
     if(ui.imp){ ui.imp.busy=false; ui.imp.error='Couldn’t run the scanner (it downloads once and needs internet). You can paste the counts as text instead.'; render(); }
@@ -611,7 +667,7 @@ function renderImportCard(){
   if(!ui.imp){
     return `<section class="card import-card">
       <h2>📷 Scan / import backup counts</h2>
-      <p class="hint">Prefill the Backups on Hand column from your freezer door — upload a photo to scan the flavor labels, or paste counts as text. You review everything before it's applied.</p>
+      <p class="hint">Fill in the Backups on Hand column from your freezer door — upload a photo and the app fills in the tally counts, or paste counts as text. Double-check the results afterward.</p>
       <button class="act primary" data-act="imp-open">Scan / import…</button>
     </section>`;
   }
@@ -652,14 +708,30 @@ function renderImportCard(){
     body = `<label class="act primary" for="imp-file" style="display:inline-block">📷 Upload freezer photo (JPEG/PNG)</label>
       <input id="imp-file" type="file" accept="image/*" data-act="imp-file" style="display:none">
       ${imp.error?`<div class="warn-inline">${esc(imp.error)}</div>`:''}
-      <p class="imp-hint2">The scan reads the printed flavor labels; handwritten tally strokes don't scan reliably, so you'll confirm the counts on the next screen. <button class="linklike" data-act="imp-paste">Or paste counts as text instead</button></p>
+      <p class="imp-hint2">The scan reads the printed flavor labels, counts the tally strokes next to each, and fills in the Backups on Hand column for you to double-check below. Best with a close, straight-on, well-lit shot. <button class="linklike" data-act="imp-paste">Or paste counts as text instead</button></p>
       <div class="imp-actions"><button class="act" data-act="imp-cancel">Cancel</button></div>`;
   }
   return `<section class="card import-card">
     <h2>📷 Scan / import backup counts</h2>
-    <p class="hint">Upload a photo of the freezer door (or paste text). Names are fuzzy-matched; review and fix counts before applying. Unlisted displayed flavors are set to 0.</p>
+    <p class="hint">Upload a photo of the freezer door to fill in the tally counts, or paste them as text. Then double-check the Backups on Hand column below.</p>
     ${body}
   </section>`;
+}
+// Clean post-scan summary (catalog names, not raw OCR) shown atop the Lineup.
+function renderScanSummary(){
+  const s=ui.scanSummary;
+  if(!s) return '';
+  if(!s.set.length){
+    return `<div class="trimbox"><h3>Scan finished — nothing applied</h3>
+      Couldn’t confidently read counts from that photo. Try a closer, straight-on shot, or paste the counts as text.
+      <div style="margin-top:8px"><button class="act" data-act="scan-dismiss">Dismiss</button></div></div>`;
+  }
+  return `<div class="okbox" style="text-align:left">
+    ✓ Scan applied — set backups for ${s.set.length} flavor${s.set.length===1?'':'s'}. Double-check the Backups on Hand column below and fix anything that looks off.
+    <div style="font-weight:400; margin-top:6px; color:var(--ink)">${s.set.map(x=>esc(x.name)+' <strong>'+x.count+'</strong>').join(' · ')}</div>
+    ${s.skipped?`<div style="font-weight:400; margin-top:6px; color:var(--muted)">${s.skipped} scanned line(s) couldn’t be counted — enter those by hand.</div>`:''}
+    <div style="margin-top:8px"><button class="act" data-act="scan-dismiss">Dismiss</button></div>
+  </div>`;
 }
 
 /* ============================== RENDER ============================== */
@@ -735,7 +807,7 @@ function renderLineup(plan){
   const seas = plan.displayed.filter(f=>f.type==='seasonal');
   const poolAndBenched = plan.pool.concat(plan.benched);
 
-  let html = renderImportCard();
+  let html = renderScanSummary() + renderImportCard();
   if(plan.benched.length){
     html += `<div class="trimbox"><h3>⚠ ${plan.benched.length} flavor(s) over well capacity</h3>
       Slowest flavors in an over-assigned group are benched to the off-line pool below. Free a well or change well counts in Settings.</div>`;
@@ -934,7 +1006,8 @@ document.addEventListener('click', e=>{
   const btn = e.target.closest('[data-act]');
   if(!btn) return;
   const act = btn.dataset.act;
-  if(act==='imp-open'){ ui.imp={mode:'choose',text:'',rows:null,setZero:true,busy:false,statusText:'',error:'',note:''}; render(); return; }
+  if(act==='scan-dismiss'){ ui.scanSummary=null; render(); return; }
+  if(act==='imp-open'){ ui.scanSummary=null; ui.imp={mode:'choose',text:'',rows:null,setZero:true,busy:false,statusText:'',error:'',note:''}; render(); return; }
   if(act==='imp-paste'){ if(ui.imp){ ui.imp.mode='paste'; ui.imp.error=''; } render(); return; }
   if(act==='imp-back'){ if(ui.imp) ui.imp.mode='choose'; render(); return; }
   if(act==='imp-cancel'){ ui.imp=null; render(); return; }
