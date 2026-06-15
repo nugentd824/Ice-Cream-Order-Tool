@@ -39,15 +39,17 @@ order quantities update live. The open storefront tub is counted automatically
 **Scan / import backup counts.** At the top of the Lineup is a **Scan / import** panel
 for prefilling the whole Backups on Hand column at once. Click *Scan / import…*, then:
 
-- **Upload a photo (JPEG/PNG)** of the freezer door. The app runs OCR in your browser
-  (Tesseract.js, downloaded once from a CDN — so the *scan* needs internet the first
-  time; the rest of the app stays offline), reads the printed flavor labels, and
-  pre-fills the review table. It also **estimates each count** by analyzing the
-  handwritten tally strokes to the right of each label (projecting the pen ink and
-  counting separated vertical strokes). Stroke counting is approximate — photo angle,
-  smudges, and faint marks all affect it — so the estimates are there to save typing and
-  **must be verified** at the review step. If a number is printed on the line, that wins
-  over the estimate; if the analysis can't run, counts are left blank.
+- **Upload a photo (JPEG/PNG)** of the freezer door. The app upscales, grayscales and
+  contrast-boosts the image, runs OCR in your browser (Tesseract.js, downloaded once from
+  a CDN — so the *scan* needs internet the first time; the rest of the app stays offline),
+  reads the printed flavor labels, and counts the handwritten tally strokes next to each
+  (projecting the pen ink and counting separated vertical strokes). It then **writes those
+  counts straight into the Backups on Hand column** for the flavors it recognizes and
+  shows a short summary — no raw-text review screen. **Double-check the Backups column
+  afterward** and fix anything off (counts and OCR are approximate — photo angle, smudges,
+  and faint marks all affect them). Flavors it didn't recognize are left unchanged; lines
+  it couldn't count are reported so you can enter them by hand. Best results come from a
+  close, straight-on, well-lit shot.
 - **Or paste counts as text** — one flavor per line with a number (`Coffee 3`) or tally
   strokes (`Coffee |||`). This path is fully offline and the most reliable.
 
