@@ -5,7 +5,7 @@
   "description": "Pre-RFP supplier communication manager — multi-client email campaigns via Microsoft 365",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && prisma db push --skip-generate && next build",
     "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push",

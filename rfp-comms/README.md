@@ -30,13 +30,9 @@ While you're in the Storage tab, also create a **Blob** store — attachment fil
 there (Postgres keeps only their metadata), and `BLOB_READ_WRITE_TOKEN` is injected
 automatically.
 
-Create the tables once, from any machine:
-
-```bash
-cd rfp-comms
-npm install
-DATABASE_URL="postgresql://…" npx prisma db push
-```
+Tables and indexes are created automatically: every deployment runs
+`prisma db push` during the build, so the database always matches the schema.
+(For local development against your own database: `npm run db:push`.)
 
 ### 2. Microsoft Entra app registration (≈5 min)
 

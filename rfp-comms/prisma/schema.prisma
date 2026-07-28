@@ -4,7 +4,10 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url       = env("DATABASE_URL")
+  // Schema pushes need a direct (non-pooled) connection; the Neon integration
+  // on Vercel injects this automatically alongside DATABASE_URL.
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 model Client {
