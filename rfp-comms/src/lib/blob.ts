@@ -2,26 +2,37 @@ import { put, del } from "@vercel/blob";
 import { ApiError } from "./api";
 
 // Attachment payloads live in Vercel Blob; Postgres keeps only metadata plus
-// the blob URL. Blob URLs carry an unguessable random suffix and never leave
-// the server — browsers download through the authenticated
-// /api/attachments/[id] proxy.
+// the blob URL. Two store generations are supported:
+//  - private stores (current default): the runtime is bound to the store
+//    (BLOB_STORE_ID is injected, the SDK authenticates via OIDC on Vercel)
+//    and reads need an Authorization header;
+//  - classic public stores: authenticated by *_READ_WRITE_TOKEN, URLs are
+//    unguessable-but-public.
+// Either way the URL never leaves the server — browsers download through the
+// authenticated /api/attachments/[id] proxy.
 
-// The standard name is BLOB_READ_WRITE_TOKEN, but a store connected with a
-// custom env prefix injects <PREFIX>_READ_WRITE_TOKEN — accept that too.
 export function resolveBlobToken(): string | undefined {
   if (process.env.BLOB_READ_WRITE_TOKEN) return process.env.BLOB_READ_WRITE_TOKEN;
   const key = Object.keys(process.env).find((k) => k.endsWith("_READ_WRITE_TOKEN"));
   return key ? process.env[key] : undefined;
 }
 
-function requireToken(): string {
-  const token = resolveBlobToken();
-  if (!token)
+export function blobConfigured(): boolean {
+  return Boolean(process.env.BLOB_STORE_ID || resolveBlobToken());
+}
+
+function requireConfigured() {
+  if (!blobConfigured())
     throw new ApiError(
       500,
-      "Blob storage is not configured — create a Blob store in your Vercel project (Storage tab) and set BLOB_READ_WRITE_TOKEN"
+      "Blob storage is not configured — connect a Blob store to this project (Vercel Storage tab)"
     );
-  return token;
+}
+
+// BLOB_STORE_ID marks a store-bound (private) setup; without it we assume a
+// classic public store addressed purely by token.
+function storeAccess(): "private" | "public" {
+  return process.env.BLOB_STORE_ID ? "private" : "public";
 }
 
 export async function putAttachmentBlob(
@@ -30,18 +41,22 @@ export async function putAttachmentBlob(
   mimeType: string,
   body: Buffer
 ): Promise<string> {
-  const token = requireToken();
+  requireConfigured();
+  const token = resolveBlobToken();
   const { url } = await put(`attachments/${templateId}/${fileName}`, body, {
-    access: "public",
+    access: storeAccess(),
     addRandomSuffix: true,
     contentType: mimeType,
-    token,
+    ...(token ? { token } : {}),
   });
   return url;
 }
 
 export async function fetchAttachmentBlob(url: string): Promise<Buffer> {
-  const res = await fetch(url);
+  // Private-store URLs reject anonymous fetches; OIDC (on Vercel) or the
+  // read-write token authenticates us. Harmless extra header for public URLs.
+  const auth = resolveBlobToken() ?? process.env.VERCEL_OIDC_TOKEN;
+  const res = await fetch(url, auth ? { headers: { Authorization: `Bearer ${auth}` } } : undefined);
   if (!res.ok)
     throw new ApiError(502, `Could not read attachment from storage (HTTP ${res.status})`);
   return Buffer.from(await res.arrayBuffer());
@@ -52,7 +67,8 @@ export async function fetchAttachmentBlob(url: string): Promise<Buffer> {
 export async function deleteAttachmentBlobs(urls: string[]): Promise<void> {
   if (urls.length === 0) return;
   try {
-    await del(urls, { token: requireToken() });
+    const token = resolveBlobToken();
+    await del(urls, token ? { token } : undefined);
   } catch (e) {
     console.error("Blob cleanup failed (orphaned blob left behind):", e);
   }
