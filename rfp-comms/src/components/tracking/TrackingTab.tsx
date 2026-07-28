@@ -108,10 +108,24 @@ export function TrackingTab({
               Retry {retryItems.length} failed
             </button>
           )}
-          <button className="btn" onClick={() => exportCsv(`${exportName}.csv`, EXPORT_HEADERS, exportRows())}>
+          <button
+            className="btn"
+            onClick={() =>
+              exportCsv(`${exportName}.csv`, EXPORT_HEADERS, exportRows()).catch((e) =>
+                toast((e as Error).message, "error")
+              )
+            }
+          >
             Export CSV
           </button>
-          <button className="btn" onClick={() => exportXlsx(`${exportName}.xlsx`, "Send Log", EXPORT_HEADERS, exportRows())}>
+          <button
+            className="btn"
+            onClick={() =>
+              exportXlsx(`${exportName}.xlsx`, "Send Log", EXPORT_HEADERS, exportRows()).catch((e) =>
+                toast((e as Error).message, "error")
+              )
+            }
+          >
             Export Excel
           </button>
         </div>

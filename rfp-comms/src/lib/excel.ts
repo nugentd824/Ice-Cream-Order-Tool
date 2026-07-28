@@ -2,7 +2,9 @@
 
 // Client-side Excel/CSV parsing and export (SheetJS). Files are parsed in the
 // browser so the mapping/preview wizard never uploads the raw spreadsheet.
-import * as XLSX from "xlsx";
+// SheetJS is by far the largest dependency in the client bundle, so it is
+// loaded on demand: the dynamic import() below becomes its own chunk, fetched
+// the first time a user actually imports or exports a spreadsheet.
 import type { ImportRow } from "./types";
 
 export type FieldKey = keyof ImportRow;
@@ -33,6 +35,7 @@ const SYNONYMS: Record<FieldKey, string[]> = {
 export type ParsedWorkbook = { sheetNames: string[]; grids: Record<string, string[][]> };
 
 export async function readWorkbook(file: File): Promise<ParsedWorkbook> {
+  const XLSX = await import("xlsx");
   const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
   const grids: Record<string, string[][]> = {};
   for (const name of wb.SheetNames) {
@@ -132,19 +135,21 @@ export function rowsFromGrid(
   return rows;
 }
 
-export function exportXlsx(
+export async function exportXlsx(
   fileName: string,
   sheetName: string,
   headers: string[],
   rows: (string | number)[][]
 ) {
+  const XLSX = await import("xlsx");
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
   XLSX.writeFile(wb, fileName);
 }
 
-export function exportCsv(fileName: string, headers: string[], rows: (string | number)[][]) {
+export async function exportCsv(fileName: string, headers: string[], rows: (string | number)[][]) {
+  const XLSX = await import("xlsx");
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   const csv = XLSX.utils.sheet_to_csv(ws);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });

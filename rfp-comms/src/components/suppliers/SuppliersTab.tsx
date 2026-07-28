@@ -160,7 +160,7 @@ export function SuppliersTab({
         c.emailValid ? "Yes" : "NO",
         c.duplicateOfId ? "Yes" : "",
       ])
-    );
+    ).catch((e) => toast((e as Error).message, "error"));
   };
 
   if (contacts.length === 0 && !showImport) {
