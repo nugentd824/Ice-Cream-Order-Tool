@@ -53,9 +53,11 @@ This is what lets the app sign you in and send mail as you. In the
 4. **Certificates & secrets** → **New client secret** → copy the secret **Value**
    (not the ID) → `AUTH_MICROSOFT_ENTRA_ID_SECRET`. Note the expiry; you'll rotate it.
 5. **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated**:
-   `Mail.Send` and `User.Read` (`openid`, `profile`, `email`, `offline_access` are
-   requested at sign-in automatically). These are user-consentable in most tenants; if
-   yours requires admin consent, ask IT to click **Grant admin consent** on this page.
+   `Mail.Send`, `Mail.ReadWrite`, and `User.Read` (`openid`, `profile`, `email`,
+   `offline_access` are requested at sign-in automatically). `Mail.ReadWrite` is needed
+   because sends are built as drafts first — that's how attachments are uploaded.
+   These are user-consentable in most tenants; if yours requires admin consent, ask IT
+   to click **Grant admin consent** on this page.
 
 > If your firm restricts app registrations entirely, IT can create this registration
 > from the steps above in a few minutes — the app only ever requests delegated

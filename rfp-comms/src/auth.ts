@@ -2,7 +2,9 @@ import NextAuth from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
-const SCOPES = "openid profile email offline_access User.Read Mail.Send";
+// Mail.ReadWrite is required because sending builds a draft first (that is how
+// attachments over Graph's inline cap are uploaded), then sends it.
+const SCOPES = "openid profile email offline_access User.Read Mail.ReadWrite Mail.Send";
 
 function tenantTokenEndpoint(): string {
   // AUTH_MICROSOFT_ENTRA_ID_ISSUER looks like https://login.microsoftonline.com/<tenant>/v2.0
