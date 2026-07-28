@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { resolveBlobToken } from "@/lib/blob";
+import { blobConfigured } from "@/lib/blob";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // database is reachable, and blob storage is configured. Reports env var
 // NAMES only where useful for diagnosis — never values or application data.
 export async function GET() {
-  const blob = Boolean(resolveBlobToken());
+  const blob = blobConfigured();
   const blobEnvNames = Object.keys(process.env).filter((k) => /blob|_read_write_token/i.test(k));
   let db = false;
   let error: string | undefined;
