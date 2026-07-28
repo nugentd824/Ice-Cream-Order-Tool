@@ -58,6 +58,7 @@ model Contact {
   sendLogs      SendLog[]
 
   @@index([clientId, email])
+  @@index([audienceId])
 }
 
 model Template {
@@ -102,4 +103,7 @@ model SendLog {
   sentAt          DateTime @default(now())
 
   @@index([clientId, sentAt])
+  @@index([contactId, status])
+  @@index([audienceId, status])
+  @@index([toEmail])
 }

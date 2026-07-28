@@ -84,7 +84,7 @@ Adding a colleague later = adding their email to `ALLOWED_EMAILS`.
 cd rfp-comms
 cp .env.example .env   # fill in values; uncomment AUTH_URL
 npm install
-npm run db:push        # once
+npm run db:push        # once, and again after any schema change (tables, indexes)
 npm run dev            # http://localhost:3000
 ```
 
