@@ -4,6 +4,7 @@ import { guarded, ApiError } from "@/lib/api";
 import { renderMerge, contactMergeContext, type MergeContext } from "@/lib/merge";
 import { sendMailViaGraph } from "@/lib/graph";
 import { emailHtmlWrap, loadAudienceBundle } from "@/lib/sendMail";
+import { fetchAttachmentBlob } from "@/lib/blob";
 
 const SAMPLE_CTX = (clientName: string): MergeContext => ({
   firstName: "Alex",
@@ -54,11 +55,13 @@ export const POST = guarded(async (req, _params, session) => {
       subject,
       html,
       bcc: [],
-      attachments: template.attachments.map((a) => ({
-        fileName: a.fileName,
-        mimeType: a.mimeType,
-        data: Buffer.from(a.data),
-      })),
+      attachments: await Promise.all(
+        template.attachments.map(async (a) => ({
+          fileName: a.fileName,
+          mimeType: a.mimeType,
+          data: await fetchAttachmentBlob(a.blobUrl),
+        }))
+      ),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Send failed";

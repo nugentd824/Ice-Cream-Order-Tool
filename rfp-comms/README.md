@@ -26,6 +26,10 @@ Any Postgres works. Easiest: in your Vercel project → **Storage** tab → crea
 **Neon Postgres** database — Vercel injects `DATABASE_URL` automatically. (Or create a
 free database at neon.tech and copy the pooled connection string.)
 
+While you're in the Storage tab, also create a **Blob** store — attachment files live
+there (Postgres keeps only their metadata), and `BLOB_READ_WRITE_TOKEN` is injected
+automatically.
+
 Create the tables once, from any machine:
 
 ```bash
@@ -69,6 +73,7 @@ environment variables (see `.env.example`):
 | Variable | Value |
 | --- | --- |
 | `DATABASE_URL` | Postgres pooled connection string (auto if using Vercel Storage) |
+| `BLOB_READ_WRITE_TOKEN` | Attachment storage token (auto if using a Vercel Blob store) |
 | `AUTH_SECRET` | `openssl rand -base64 32` |
 | `AUTH_MICROSOFT_ENTRA_ID_ID` | Application (client) ID |
 | `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Client secret value |

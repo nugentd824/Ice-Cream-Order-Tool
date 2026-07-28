@@ -80,7 +80,10 @@ model Attachment {
   fileName   String
   mimeType   String
   size       Int
-  data       Bytes
+  // Payload lives in Vercel Blob; Postgres keeps only metadata. The URL has
+  // an unguessable suffix and never leaves the server — downloads go through
+  // the authenticated /api/attachments/[id] proxy.
+  blobUrl    String
   createdAt  DateTime @default(now())
 }
 

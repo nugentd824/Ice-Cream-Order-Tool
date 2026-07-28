@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { guarded, ApiError } from "@/lib/api";
 import { sentPairs, deriveSendStatus } from "@/lib/aggregate";
+import { deleteAttachmentBlobs } from "@/lib/blob";
 import type { ClientDetail } from "@/lib/types";
 
 export const GET = guarded(async (_req, params) => {
@@ -82,6 +83,13 @@ export const PATCH = guarded(async (req, params) => {
 });
 
 export const DELETE = guarded(async (_req, params) => {
+  // The DB cascade removes attachment rows; collect their blob URLs first so
+  // the payloads don't orphan in storage.
+  const attachments = await prisma.attachment.findMany({
+    where: { template: { audience: { clientId: params.id } } },
+    select: { blobUrl: true },
+  });
   await prisma.client.delete({ where: { id: params.id } });
+  await deleteAttachmentBlobs(attachments.map((a) => a.blobUrl));
   return NextResponse.json({ ok: true });
 });

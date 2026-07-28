@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { guarded, ApiError } from "@/lib/api";
+import { putAttachmentBlob, deleteAttachmentBlobs } from "@/lib/blob";
 import { fmtBytes } from "@/lib/format";
 
 // Vercel serverless caps request bodies at ~4.5MB, so each file must come in
@@ -30,22 +31,34 @@ export const POST = guarded(async (req, params) => {
       `Total attachments would exceed ${fmtBytes(PER_TEMPLATE_LIMIT)} — most mail gateways reject messages that large`
     );
 
-  const data = Buffer.from(await file.arrayBuffer());
-  const [attachment] = await prisma.$transaction([
-    prisma.attachment.create({
-      data: {
-        templateId: template.id,
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        size: file.size,
-        data,
-      },
-      select: { id: true, fileName: true, mimeType: true, size: true },
-    }),
-    prisma.template.update({
-      where: { id: template.id },
-      data: { version: { increment: 1 } },
-    }),
-  ]);
-  return NextResponse.json(attachment, { status: 201 });
+  const mimeType = file.type || "application/octet-stream";
+  const blobUrl = await putAttachmentBlob(
+    template.id,
+    file.name,
+    mimeType,
+    Buffer.from(await file.arrayBuffer())
+  );
+
+  try {
+    const [attachment] = await prisma.$transaction([
+      prisma.attachment.create({
+        data: {
+          templateId: template.id,
+          fileName: file.name,
+          mimeType,
+          size: file.size,
+          blobUrl,
+        },
+        select: { id: true, fileName: true, mimeType: true, size: true },
+      }),
+      prisma.template.update({
+        where: { id: template.id },
+        data: { version: { increment: 1 } },
+      }),
+    ]);
+    return NextResponse.json(attachment, { status: 201 });
+  } catch (e) {
+    await deleteAttachmentBlobs([blobUrl]);
+    throw e;
+  }
 });

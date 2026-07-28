@@ -5,6 +5,7 @@ import { guarded, ApiError } from "@/lib/api";
 import { renderMerge, contactMergeContext } from "@/lib/merge";
 import { sendMailViaGraph } from "@/lib/graph";
 import { emailHtmlWrap, loadAudienceBundle, parseBcc } from "@/lib/sendMail";
+import { fetchAttachmentBlob } from "@/lib/blob";
 
 // How long an in-flight PENDING claim blocks a competing send for the same
 // contact+audience+version. Past this it is treated as abandoned (crashed run).
@@ -112,11 +113,13 @@ export const POST = guarded(async (req, _params, session) => {
       subject,
       html,
       bcc: parseBcc(audience.bccEmails),
-      attachments: template.attachments.map((a) => ({
-        fileName: a.fileName,
-        mimeType: a.mimeType,
-        data: Buffer.from(a.data),
-      })),
+      attachments: await Promise.all(
+        template.attachments.map(async (a) => ({
+          fileName: a.fileName,
+          mimeType: a.mimeType,
+          data: await fetchAttachmentBlob(a.blobUrl),
+        }))
+      ),
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Send failed";
