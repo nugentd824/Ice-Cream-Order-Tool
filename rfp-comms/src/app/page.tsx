@@ -3,22 +3,25 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/clientApi";
-import type { ClientSummary } from "@/lib/types";
+import type { ClientListPage } from "@/lib/types";
 import { fmtDateOnly } from "@/lib/format";
 import { ClientStatusPill, SendStatusPill, EmptyState, Modal } from "@/components/ui";
 import { useToast } from "@/components/toast";
 
+const PAGE_SIZE = 20;
+
 export default function Dashboard() {
-  const [clients, setClients] = useState<ClientSummary[] | null>(null);
+  const [data, setData] = useState<ClientListPage | null>(null);
+  const [page, setPage] = useState(1);
   const [showAdd, setShowAdd] = useState(false);
   const router = useRouter();
   const toast = useToast();
 
   const load = useCallback(() => {
-    api<ClientSummary[]>("/api/clients")
-      .then(setClients)
+    api<ClientListPage>(`/api/clients?page=${page}&pageSize=${PAGE_SIZE}`)
+      .then(setData)
       .catch((e) => toast(e.message, "error"));
-  }, [toast]);
+  }, [page, toast]);
 
   useEffect(load, [load]);
 
@@ -34,9 +37,9 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {clients === null ? (
+      {data === null ? (
         <p className="subtle">Loading…</p>
-      ) : clients.length === 0 ? (
+      ) : data.total === 0 ? (
         <EmptyState
           title="No client engagements yet"
           hint="Add your first client to set up its supplier list, audiences, and communications."
@@ -47,8 +50,9 @@ export default function Dashboard() {
           }
         />
       ) : (
+        <>
         <div className="card-grid">
-          {clients.map((c) => (
+          {data.clients.map((c) => (
             <div
               key={c.id}
               className="card client-card"
@@ -90,6 +94,27 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+        {data.total > PAGE_SIZE && (
+          <div className="row between" style={{ marginTop: 20 }}>
+            <span className="subtle">
+              Showing {(data.page - 1) * data.pageSize + 1}–
+              {Math.min(data.page * data.pageSize, data.total)} of {data.total} clients
+            </span>
+            <div className="row">
+              <button className="btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                ← Previous
+              </button>
+              <button
+                className="btn"
+                disabled={page * PAGE_SIZE >= data.total}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
+        </>
       )}
 
       {showAdd && (

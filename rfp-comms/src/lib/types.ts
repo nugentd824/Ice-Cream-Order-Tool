@@ -43,6 +43,13 @@ export type ClientSummary = {
   audiences: Pick<AudienceDTO, "id" | "key" | "label" | "targetSendDate" | "assignedCount" | "sentCount" | "sendStatus">[];
 };
 
+export type ClientListPage = {
+  clients: ClientSummary[];
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
 export type ClientDetail = {
   id: string;
   name: string;
