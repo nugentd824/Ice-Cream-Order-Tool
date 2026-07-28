@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { resolveBlobToken } from "@/lib/blob";
 
 export const dynamic = "force-dynamic";
 
-// Unauthenticated deployment health check: confirms this build is live and the
-// database is reachable. Exposes no application data.
+// Unauthenticated deployment health check: confirms this build is live, the
+// database is reachable, and blob storage is configured. Reports env var
+// NAMES only where useful for diagnosis — never values or application data.
 export async function GET() {
+  const blob = Boolean(resolveBlobToken());
+  const blobEnvNames = Object.keys(process.env).filter((k) => /blob|_read_write_token/i.test(k));
+  let db = false;
+  let error: string | undefined;
   try {
     await prisma.$queryRaw`SELECT 1`;
-    return NextResponse.json({ ok: true, db: true });
+    db = true;
   } catch (e) {
-    const error = e instanceof Error ? e.message.slice(0, 200) : "unknown";
-    return NextResponse.json({ ok: true, db: false, error }, { status: 503 });
+    error = e instanceof Error ? e.message.slice(0, 200) : "unknown";
   }
+  const healthy = db && blob;
+  return NextResponse.json(
+    { ok: true, db, blob, blobEnvNames, ...(error ? { error } : {}) },
+    { status: healthy ? 200 : 503 }
+  );
 }
