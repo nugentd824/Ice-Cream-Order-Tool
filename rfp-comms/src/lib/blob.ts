@@ -1,4 +1,4 @@
-import { put, del } from "@vercel/blob";
+import { put, del, get } from "@vercel/blob";
 import { ApiError } from "./api";
 
 // Attachment payloads live in Vercel Blob; Postgres keeps only metadata plus
@@ -53,13 +53,17 @@ export async function putAttachmentBlob(
 }
 
 export async function fetchAttachmentBlob(url: string): Promise<Buffer> {
-  // Private-store URLs reject anonymous fetches; OIDC (on Vercel) or the
-  // read-write token authenticates us. Harmless extra header for public URLs.
-  const auth = resolveBlobToken() ?? process.env.VERCEL_OIDC_TOKEN;
-  const res = await fetch(url, auth ? { headers: { Authorization: `Bearer ${auth}` } } : undefined);
-  if (!res.ok)
-    throw new ApiError(502, `Could not read attachment from storage (HTTP ${res.status})`);
-  return Buffer.from(await res.arrayBuffer());
+  // Read through the SDK so authentication works exactly like uploads do
+  // (store binding on Vercel, token elsewhere) — raw fetches against private
+  // stores are rejected.
+  const token = resolveBlobToken();
+  const result = await get(url, {
+    access: storeAccess(),
+    ...(token ? { token } : {}),
+  });
+  if (!result || result.statusCode !== 200 || !result.stream)
+    throw new ApiError(502, "Could not read attachment from storage");
+  return Buffer.from(await new Response(result.stream).arrayBuffer());
 }
 
 // Best-effort cleanup: the DB row is the source of truth, and an orphaned
