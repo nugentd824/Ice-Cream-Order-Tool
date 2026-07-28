@@ -97,9 +97,16 @@ model SendLog {
   audienceLabel   String   @default("")
   subject         String   @default("")
   templateVersion Int      @default(1)
-  status          String // SENT | FAILED
+  // PENDING = row claimed before the Graph call; SENT/FAILED = final outcome.
+  // A row stuck in PENDING means the function died mid-send: the email may or
+  // may not have gone out, so nothing auto-resends it.
+  status          String // PENDING | SENT | FAILED
   isTest          Boolean  @default(false)
   error           String   @default("")
+  // Client-generated key, unique per send attempt. Replaying a request with a
+  // key we already processed returns the recorded outcome instead of sending
+  // again, so lost responses / retries can never double-send.
+  idempotencyKey  String?  @unique
   sentAt          DateTime @default(now())
 
   @@index([clientId, sentAt])

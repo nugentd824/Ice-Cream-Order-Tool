@@ -3,7 +3,14 @@
 import { useRef, useState } from "react";
 import { api } from "./clientApi";
 
-export type SendItem = { contactId: string; audienceId: string; label: string };
+export type SendItem = {
+  contactId: string;
+  audienceId: string;
+  label: string;
+  // Explicit user intent to send again to a contact who already received this
+  // template version (the server refuses otherwise).
+  allowResend?: boolean;
+};
 
 export type SendProgress = {
   running: boolean;
@@ -37,12 +44,34 @@ export function useSendLoop() {
       if (cancelRef.current) break;
       const item = items[i];
       setProgress((p) => ({ ...p, current: item.label }));
-      try {
-        await api("/api/send", { json: { audienceId: item.audienceId, contactId: item.contactId } });
-        ok++;
-      } catch {
-        fail++;
+      // One idempotency key per recipient per run. Network failures are
+      // ambiguous (the send may have gone through), so those are retried with
+      // the SAME key — the server replays the recorded outcome rather than
+      // sending twice. HTTP errors are real outcomes and are not retried.
+      const idempotencyKey = crypto.randomUUID();
+      let sent = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await api("/api/send", {
+            json: {
+              audienceId: item.audienceId,
+              contactId: item.contactId,
+              idempotencyKey,
+              allowResend: item.allowResend === true,
+            },
+          });
+          sent = true;
+          break;
+        } catch (e) {
+          if (e instanceof TypeError && attempt < 2) {
+            await new Promise((r) => setTimeout(r, 2000));
+            continue;
+          }
+          break;
+        }
       }
+      if (sent) ok++;
+      else fail++;
       setProgress((p) => ({ ...p, done: i + 1, ok, fail }));
       if (i < items.length - 1 && delayMs > 0) {
         await new Promise((r) => setTimeout(r, delayMs));

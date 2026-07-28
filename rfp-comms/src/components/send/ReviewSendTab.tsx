@@ -198,6 +198,9 @@ function AudiencePanel({
       contactId: c.id,
       audienceId: audience.id,
       label: c.email,
+      // The user explicitly kept an already-sent contact selected (the modal
+      // shows an amber warning for these) — that is the resend opt-in.
+      allowResend: sentIds.has(c.id),
     }));
     start(items, delaySec * 1000, (ok, fail, cancelled) => {
       toast(
