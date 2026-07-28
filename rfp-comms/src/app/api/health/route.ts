@@ -19,8 +19,9 @@ export async function GET() {
     error = e instanceof Error ? e.message.slice(0, 200) : "unknown";
   }
   const healthy = db && blob;
+  const commit = (process.env.VERCEL_GIT_COMMIT_SHA ?? "").slice(0, 7) || "unknown";
   return NextResponse.json(
-    { ok: true, db, blob, blobEnvNames, ...(error ? { error } : {}) },
+    { ok: true, commit, db, blob, blobEnvNames, ...(error ? { error } : {}) },
     { status: healthy ? 200 : 503 }
   );
 }
