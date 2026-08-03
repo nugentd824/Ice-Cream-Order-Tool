@@ -7,6 +7,12 @@ export const GET = guarded(async (_req, params) => {
   const contacts = await prisma.contact.findMany({
     where: { clientId: params.id },
     orderBy: [{ company: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
+    include: {
+      attachments: {
+        select: { id: true, fileName: true, mimeType: true, size: true },
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
   return NextResponse.json(contacts);
 });

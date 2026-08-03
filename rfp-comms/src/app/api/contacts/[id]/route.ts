@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { guarded, ApiError } from "@/lib/api";
+import { deleteAttachmentBlobs } from "@/lib/blob";
 import { isValidEmail } from "@/lib/format";
 
 export const PATCH = guarded(async (req, params) => {
@@ -32,6 +33,13 @@ export const PATCH = guarded(async (req, params) => {
 });
 
 export const DELETE = guarded(async (_req, params) => {
+  // Cascade removes attachment rows; collect blob URLs first so payloads
+  // don't orphan in storage.
+  const attachments = await prisma.contactAttachment.findMany({
+    where: { contactId: params.id },
+    select: { blobUrl: true },
+  });
   await prisma.contact.delete({ where: { id: params.id } });
+  await deleteAttachmentBlobs(attachments.map((a) => a.blobUrl));
   return NextResponse.json({ ok: true });
 });

@@ -29,10 +29,18 @@ export const POST = guarded(async (req, _params, session) => {
     throw new ApiError(400, "Template subject and body must not be empty");
 
   let ctx = SAMPLE_CTX(audience.client.name);
+  // Vendor-specific files for the sampled contact ride along, so the test
+  // email matches exactly what that supplier would receive.
+  let contactAttachments: { fileName: string; mimeType: string; blobUrl: string }[] = [];
   if (sampleContactId) {
-    const contact = await prisma.contact.findUnique({ where: { id: sampleContactId } });
-    if (contact && contact.clientId === audience.clientId)
+    const contact = await prisma.contact.findUnique({
+      where: { id: sampleContactId },
+      include: { attachments: true },
+    });
+    if (contact && contact.clientId === audience.clientId) {
       ctx = contactMergeContext(contact, audience.client.name);
+      contactAttachments = contact.attachments;
+    }
   }
 
   const subject = `[TEST] ${renderMerge(template.subject, ctx)}`;
@@ -56,7 +64,7 @@ export const POST = guarded(async (req, _params, session) => {
       html,
       bcc: [],
       attachments: await Promise.all(
-        template.attachments.map(async (a) => ({
+        [...template.attachments, ...contactAttachments].map(async (a) => ({
           fileName: a.fileName,
           mimeType: a.mimeType,
           data: await fetchAttachmentBlob(a.blobUrl),
