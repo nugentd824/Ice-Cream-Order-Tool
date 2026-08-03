@@ -59,9 +59,26 @@ model Contact {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   sendLogs      SendLog[]
+  attachments   ContactAttachment[]
 
   @@index([clientId, email])
   @@index([audienceId])
+}
+
+// Vendor-specific files attached to one supplier contact. Any email sent to
+// this contact carries these in addition to the audience template's shared
+// attachments. Payloads live in Vercel Blob like template attachments.
+model ContactAttachment {
+  id        String   @id @default(cuid())
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  fileName  String
+  mimeType  String
+  size      Int
+  blobUrl   String
+  createdAt DateTime @default(now())
+
+  @@index([contactId])
 }
 
 model Template {

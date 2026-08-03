@@ -71,6 +71,8 @@ export type ContactDTO = {
   notes: string;
   emailValid: boolean;
   duplicateOfId: string | null;
+  // Vendor-specific files that ride along with every email to this contact.
+  attachments: AttachmentMeta[];
 };
 
 export type SendLogDTO = {

@@ -45,7 +45,10 @@ export const POST = guarded(async (req, _params, session) => {
 
   const audience = await loadAudienceBundle(audienceId);
   const template = audience.template!;
-  const contact = await prisma.contact.findUnique({ where: { id: contactId } });
+  const contact = await prisma.contact.findUnique({
+    where: { id: contactId },
+    include: { attachments: true },
+  });
 
   if (!contact || contact.clientId !== audience.clientId)
     throw new ApiError(404, "Contact not found");
@@ -113,8 +116,9 @@ export const POST = guarded(async (req, _params, session) => {
       subject,
       html,
       bcc: parseBcc(audience.bccEmails),
+      // Shared template attachments first, then this vendor's specific files.
       attachments: await Promise.all(
-        template.attachments.map(async (a) => ({
+        [...template.attachments, ...contact.attachments].map(async (a) => ({
           fileName: a.fileName,
           mimeType: a.mimeType,
           data: await fetchAttachmentBlob(a.blobUrl),

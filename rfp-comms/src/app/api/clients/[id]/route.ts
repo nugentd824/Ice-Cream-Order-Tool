@@ -85,11 +85,17 @@ export const PATCH = guarded(async (req, params) => {
 export const DELETE = guarded(async (_req, params) => {
   // The DB cascade removes attachment rows; collect their blob URLs first so
   // the payloads don't orphan in storage.
-  const attachments = await prisma.attachment.findMany({
-    where: { template: { audience: { clientId: params.id } } },
-    select: { blobUrl: true },
-  });
+  const [templateAtts, contactAtts] = await Promise.all([
+    prisma.attachment.findMany({
+      where: { template: { audience: { clientId: params.id } } },
+      select: { blobUrl: true },
+    }),
+    prisma.contactAttachment.findMany({
+      where: { contact: { clientId: params.id } },
+      select: { blobUrl: true },
+    }),
+  ]);
   await prisma.client.delete({ where: { id: params.id } });
-  await deleteAttachmentBlobs(attachments.map((a) => a.blobUrl));
+  await deleteAttachmentBlobs([...templateAtts, ...contactAtts].map((a) => a.blobUrl));
   return NextResponse.json({ ok: true });
 });

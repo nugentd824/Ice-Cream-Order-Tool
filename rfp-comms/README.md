@@ -103,7 +103,11 @@ npm run dev            # http://localhost:3000
    diff — audience assignments are always preserved (matching is by email address).
    Assign audiences with bulk actions (shift-click selects ranges) or the per-row
    dropdown. The **⧉** action duplicates a contact into the other audience for the rare
-   supplier that must receive both communications.
+   supplier that must receive both communications. The **📎 Files** button attaches
+   vendor-specific files (pricing sheets, site packets) to an individual supplier —
+   these automatically go out with every email to that supplier, alongside the
+   template's shared attachments, and the Review & Send preview shows them per
+   recipient.
 3. **Communications** → write each audience's subject and body (merge fields:
    `{{FirstName}}`, `{{LastName}}`, `{{SupplierCompany}}`, `{{ClientName}}`, plus
    `{{Title}}` and `{{Category}}`), upload attachments (≤4 MB per file), or *Copy

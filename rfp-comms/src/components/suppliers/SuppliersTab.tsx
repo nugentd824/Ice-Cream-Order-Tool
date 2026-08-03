@@ -8,6 +8,7 @@ import { Modal, EmptyState } from "@/components/ui";
 import { useToast } from "@/components/toast";
 import { ImportWizard } from "./ImportWizard";
 import { ContactModal } from "./ContactModal";
+import { ContactAttachmentsModal } from "./ContactAttachmentsModal";
 
 type SortKey = "company" | "name" | "email" | "category" | "audience";
 
@@ -32,6 +33,7 @@ export function SuppliersTab({
   const [showImport, setShowImport] = useState(false);
   const [editContact, setEditContact] = useState<ContactDTO | "new" | null>(null);
   const [dupContact, setDupContact] = useState<ContactDTO | null>(null);
+  const [attContact, setAttContact] = useState<ContactDTO | null>(null);
   const [busy, setBusy] = useState(false);
 
   const audienceById = useMemo(
@@ -285,6 +287,9 @@ export function SuppliersTab({
                 </th>
               ))}
               <th>Title</th>
+              <th style={{ width: 56 }} title="Vendor-specific files sent with every email to this supplier">
+                Files
+              </th>
               <th style={{ width: 120 }}></th>
             </tr>
           </thead>
@@ -329,6 +334,15 @@ export function SuppliersTab({
                   </select>
                 </td>
                 <td className="subtle">{c.title}</td>
+                <td>
+                  <button
+                    className="btn ghost sm"
+                    title="Vendor-specific files — included in every email to this supplier"
+                    onClick={() => setAttContact(c)}
+                  >
+                    📎{c.attachments.length > 0 ? ` ${c.attachments.length}` : ""}
+                  </button>
+                </td>
                 <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                   <button className="btn ghost sm" title="Edit" onClick={() => setEditContact(c)}>
                     Edit
@@ -345,7 +359,7 @@ export function SuppliersTab({
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="subtle" style={{ textAlign: "center", padding: 24 }}>
+                <td colSpan={9} className="subtle" style={{ textAlign: "center", padding: 24 }}>
                   No contacts match the current filters.
                 </td>
               </tr>
@@ -388,6 +402,13 @@ export function SuppliersTab({
             setDupContact(null);
             onChanged();
           }}
+        />
+      )}
+      {attContact && (
+        <ContactAttachmentsModal
+          contact={attContact}
+          onClose={() => setAttContact(null)}
+          onChanged={onChanged}
         />
       )}
     </div>

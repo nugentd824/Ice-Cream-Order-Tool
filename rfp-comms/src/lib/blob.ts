@@ -36,14 +36,14 @@ function storeAccess(): "private" | "public" {
 }
 
 export async function putAttachmentBlob(
-  templateId: string,
+  scope: string, // template id or contact-<id> — namespaces the blob path
   fileName: string,
   mimeType: string,
   body: Buffer
 ): Promise<string> {
   requireConfigured();
   const token = resolveBlobToken();
-  const { url } = await put(`attachments/${templateId}/${fileName}`, body, {
+  const { url } = await put(`attachments/${scope}/${fileName}`, body, {
     access: storeAccess(),
     addRandomSuffix: true,
     contentType: mimeType,

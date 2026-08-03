@@ -383,11 +383,22 @@ function AudiencePanel({
                   <div
                     dangerouslySetInnerHTML={{ __html: renderMerge(template.bodyHtml, previewCtx) }}
                   />
-                  {template.attachments.length > 0 && (
+                  {(template.attachments.length > 0 || previewContact!.attachments.length > 0) && (
                     <div style={{ borderTop: "1px solid #e3e6ea", paddingTop: 8, marginTop: 10 }}>
                       {template.attachments.map((a) => (
                         <span key={a.id} className="attachment-chip" style={{ marginRight: 6 }}>
                           📎 {a.fileName} <span className="faint">{fmtBytes(a.size)}</span>
+                        </span>
+                      ))}
+                      {previewContact!.attachments.map((a) => (
+                        <span
+                          key={a.id}
+                          className="attachment-chip"
+                          style={{ marginRight: 6 }}
+                          title="Vendor-specific file — only this supplier receives it"
+                        >
+                          📎 {a.fileName} <span className="faint">{fmtBytes(a.size)}</span>{" "}
+                          <span className="pill blue">vendor</span>
                         </span>
                       ))}
                     </div>
